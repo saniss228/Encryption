@@ -21,7 +21,8 @@
 
 Скачайте `release/ОТПРАВИТЬ-НА-GITHUB.zip` (9,5 МБ), распакуйте и запустите:
 
-* **Windows** — двойной клик по `ЗАПУСТИТЬ-WINDOWS.cmd`;
+* **Windows** — двойной клик по `ЗАПУСТИТЬ-WINDOWS.cmd` (рядом — `PUBLISH-WINDOWS.cmd`);
+
 * **Linux / macOS** — `bash publish-to-github.sh`.
 
 Скрипт один раз спросит токен (ввод скрыт, нигде не сохраняется) и отправит

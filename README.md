@@ -146,7 +146,8 @@ encryption/
 ├── desktop/           Electron-обёртка ПК (main.js, preload.js, package.json)
 ├── android/           Android-оболочка (MainActivity.java, Notifications.java, manifest, res)
 ├── deploy/            install.sh, encryption.service (systemd), nginx-encryption.conf
-├── tools/             build_apk.sh, run_tests.sh, test_local_only.py, tests/ (крипто, API, UI)
+├── tools/             build_release.sh, build_apk.sh, make_zip.py, run_tests.sh,
+│                      publish/ (отправка на GitHub), tests/ (крипто, API, UI, админ)
 ├── docs/              API.md, FEATURES.md, ARCHITECTURE.md, SECURITY.md, RECOVERY.md, DEPLOY.md
 ├── assets-src/        исходные иконки
 └── release/           готовые сборки: EXE, APK, архивы (сайт+сервер и «всё в одном»)
@@ -176,6 +177,21 @@ npm run build:linux                                       # → release/desktop/
 4. **Нативный Kotlin-клиент** и мультиустройственная синхронизация истории.
 
 Полный список — в конце [`docs/FEATURES.md`](docs/FEATURES.md).
+
+## Отправка проекта на GitHub
+
+Готовый комплект — `release/ОТПРАВИТЬ-НА-GITHUB.zip` (9,5 МБ): скрипты, вся история
+проекта в одном файле (`*.bundle`) и набор файлов версии 3.1.0.
+
+* **Windows** — двойной клик по `ЗАПУСТИТЬ-WINDOWS.cmd` (или `PUBLISH-WINDOWS.cmd`);
+* **Linux / macOS** — `bash publish-to-github.sh`.
+
+Скрипт один раз спросит токен GitHub (ввод скрыт, нигде не сохраняется) и отправит
+всё сам: если установлен git — зальёт готовую историю из бандла, если git нет —
+загрузит файлы через GitHub API (`tools/publish/github_upload.py`). Повторный запуск
+безопасен: уже загруженные файлы не отправляются второй раз, ветка дополняется
+без `--force`. Проверить скрипты можно на локальной заглушке GitHub API:
+`python3 tools/tests/mock_github.py` + `GH_API_BASE=http://127.0.0.1:8099 bash tools/publish/publish-to-github.sh --api-only --token тест`.
 
 ## Документация
 
