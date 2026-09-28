@@ -25,11 +25,14 @@
 
 | Версия | Файл | Размер | Установка |
 |---|---|---|---|
-| 🎁 **Один архив со всем** | `release/encryption-3.1.0-all.zip` | ~110 МБ | там же `docs/API.md` — полное описание REST + WebSocket |
+| 🎁 **Один архив со всем** | `release/encryption-3.1.0-all.zip` | 83 МБ | сервер + сайт + ПК + Android + инструкция |
 | 🌐 **Сайт** | `web/` + сервер (`release/encryption-3.1.0-server-web.zip`) | ~2 МБ | запускается тем же сервером, открывать через nginx: `http://45.90.45.92/` |
-| 🖥 **ПК (Windows)** | `release/desktop/Encryption-3.1.0-win-x64-portable.exe` | 69 МБ | просто запустить, установка не нужна (portable) |
+| 🖥 **ПК (Windows)** | `Encryption-3.1.0-win-x64-portable.exe` (внутри архива «всё в одном») | 69 МБ | просто запустить, установка не нужна (portable) |
 | 🐧 **ПК (Linux)** | собирается командой `npm run build:linux` | ~108 МБ | `chmod +x` и запустить |
-| 📱 **Android** | `release/android/Encryption-3.1.0.apk` | 612 КБ | перекинуть на телефон и открыть (разрешить установку из неизвестных источников) |
+| 📱 **Android** | `release/android/Encryption-3.1.0.apk` | 622 КБ | перекинуть на телефон и открыть (разрешить установку из неизвестных источников) |
+
+Все версии одним списком — на странице [**Releases**](https://github.com/saniss228/Encryption/releases):
+3.1.0 (сайт, ПК, Android) и предыдущие сборки 1.1.0 … 1.2.4.
 
 Ваш белый IP прописан по умолчанию во всех клиентах: `http://45.90.45.92`
 (через nginx, порт 80 → внутренний порт 6000).
@@ -147,7 +150,7 @@ encryption/
 ├── android/           Android-оболочка (MainActivity.java, Notifications.java, manifest, res)
 ├── deploy/            install.sh, encryption.service (systemd), nginx-encryption.conf
 ├── tools/             build_release.sh, build_apk.sh, make_zip.py, run_tests.sh,
-│                      publish/ (отправка на GitHub), tests/ (крипто, API, UI, админ)
+│                      start-encryption.ps1, start-server.sh, tests/ (крипто, API, UI)
 ├── docs/              API.md, FEATURES.md, ARCHITECTURE.md, SECURITY.md, RECOVERY.md, DEPLOY.md
 ├── assets-src/        исходные иконки
 └── release/           готовые сборки: EXE, APK, архивы (сайт+сервер и «всё в одном»)
@@ -178,20 +181,17 @@ npm run build:linux                                       # → release/desktop/
 
 Полный список — в конце [`docs/FEATURES.md`](docs/FEATURES.md).
 
-## Отправка проекта на GitHub
+## Запуск одной командой
 
-Готовый комплект — `release/ОТПРАВИТЬ-НА-GITHUB.zip` (9,5 МБ): скрипты, вся история
-проекта в одном файле (`*.bundle`) и набор файлов версии 3.1.0.
+* **Windows** — распакуйте архив и дважды щёлкните `ЗАПУСТИТЬ-МЕССЕНДЖЕР-WINDOWS.cmd`
+  (рядом — `START-ENCRYPTION-WINDOWS.cmd`, то же самое латиницей). Скрипт сам создаст
+  окружение, поставит зависимости, поднимет сервер, дождётся готовности и откроет
+  сайт в браузере. Порт можно задать аргументом: `START-ENCRYPTION-WINDOWS.cmd 8080`.
+* **Linux / macOS** — `bash tools/start-server.sh` (или `bash tools/start-server.sh 8080`).
 
-* **Windows** — двойной клик по `ЗАПУСТИТЬ-WINDOWS.cmd` (или `PUBLISH-WINDOWS.cmd`);
-* **Linux / macOS** — `bash publish-to-github.sh`.
-
-Скрипт один раз спросит токен GitHub (ввод скрыт, нигде не сохраняется) и отправит
-всё сам: если установлен git — зальёт готовую историю из бандла, если git нет —
-загрузит файлы через GitHub API (`tools/publish/github_upload.py`). Повторный запуск
-безопасен: уже загруженные файлы не отправляются второй раз, ветка дополняется
-без `--force`. Проверить скрипты можно на локальной заглушке GitHub API:
-`python3 tools/tests/mock_github.py` + `GH_API_BASE=http://127.0.0.1:8099 bash tools/publish/publish-to-github.sh --api-only --token тест`.
+Полезные ключи PowerShell-скрипта (`tools/start-encryption.ps1`): `-Port`, `-BindHost`,
+`-NoBrowser` (не открывать браузер), `-NoInstall` (не ставить зависимости),
+`-Reinstall` (пересобрать окружение).
 
 ## Документация
 

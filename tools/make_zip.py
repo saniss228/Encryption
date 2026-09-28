@@ -8,7 +8,7 @@
 
 Примеры:
     # всё содержимое каталога stage (пути внутри архива — относительные)
-    python3 tools/make_zip.py release/ОТПРАВИТЬ-НА-GITHUB.zip /tmp/stage
+    python3 tools/make_zip.py release/encryption-3.1.0-all.zip /tmp/stage
 
     # только нужные части проекта
     python3 tools/make_zip.py release/encryption-3.1.0-server-web.zip . \

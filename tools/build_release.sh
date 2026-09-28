@@ -32,7 +32,7 @@ rm -f "$REL/encryption-${VERSION}-server-web.zip"
 python3 tools/make_zip.py "$REL/encryption-${VERSION}-server-web.zip" . \
   server web deploy tools docs README.md \
   --exclude '**/__pycache__/**' --exclude '*.pyc' --exclude '*.db' --exclude 'data/**' \
-  --exclude '**/node_modules/**' --exclude 'tools/publish/files/**' 
+  --exclude '**/node_modules/**'
 
 # ── 2. Windows EXE ──────────────────────────────────────────────────────────
 if [ "$WITH_EXE" = 1 ]; then
@@ -47,6 +47,7 @@ fi
 # ── 3. Всё в одном архиве ───────────────────────────────────────────────────
 echo "  → сборка архива «всё в одном»…"
 cp -a README.md docs server web deploy tools desktop android "$STAGE/"
+cp -a START-ENCRYPTION-WINDOWS.cmd "ЗАПУСТИТЬ-МЕССЕНДЖЕР-WINDOWS.cmd" "$STAGE/"
 # Готовые сборки, кэш и сгенерированные копии веб-клиента в архив не нужны
 rm -rf "$STAGE"/desktop/node_modules "$STAGE"/desktop/dist "$STAGE"/android/build \
        "$STAGE"/android/assets/www "$STAGE"/desktop/build/win-* "$STAGE"/data
@@ -89,16 +90,15 @@ Encryption ${VERSION} — что в архиве
   файлами, рассылка объявлений, журнал безопасности, настройки сервера.
   Переписку администратор прочитать не может — на сервере только шифротекст.
 
-ОТПРАВКА ПРОЕКТА НА GITHUB
-  release/ОТПРАВИТЬ-НА-GITHUB.zip   готовый комплект: скрипты + вся история + файлы версии
-     Windows      — двойной клик по ЗАПУСТИТЬ-WINDOWS.cmd (или PUBLISH-WINDOWS.cmd)
-     Linux/macOS  — bash publish-to-github.sh
-  Скрипт спрашивает токен GitHub (не сохраняет его) и отправляет ветку main и тег v3.1.0.
+ЗАПУСК ОДНОЙ КОМАНДОЙ
+  ЗАПУСТИТЬ-МЕССЕНДЖЕР-WINDOWS.cmd   Windows: двойной клик — окружение, запуск, браузер
+  START-ENCRYPTION-WINDOWS.cmd       то же самое латиницей (порт аргументом: 8080 / 9000 / …)
+  tools/start-encryption.ps1         PowerShell: -Port -BindHost -NoBrowser -Reinstall
+  tools/start-server.sh              Linux/macOS: bash tools/start-server.sh [порт]
 
 ПРОВЕРКА
   bash tools/run_tests.sh                        крипто + API + «только локально» + админ-панель
   PUPPETEER_DIR=/tmp/ui bash tools/run_tests.sh  ещё и интерфейс в headless-браузере
-  python3 tools/tests/mock_github.py             заглушка GitHub API для проверки скриптов публикации
 EOF
 
 python3 tools/make_zip.py "$REL/encryption-${VERSION}-all.zip" "$STAGE"
