@@ -27,10 +27,12 @@ echo "════════ Сборка релиза Encryption ${VERSION} �
 mkdir -p "$REL/desktop" "$REL/android"
 
 # ── 1. Сайт + сервер ────────────────────────────────────────────────────────
+# Архивы собираем своим упаковщиком: имена в UTF-8 (иначе Windows покажет «?????»)
 rm -f "$REL/encryption-${VERSION}-server-web.zip"
-zip -qr "$REL/encryption-${VERSION}-server-web.zip" server web deploy tools docs README.md \
-  -x '**/__pycache__/**' '**/*.pyc' '**/*.db' 'data/**' '**/node_modules/**'
-echo "  → сайт + сервер: $(du -h "$REL/encryption-${VERSION}-server-web.zip" | cut -f1)"
+python3 tools/make_zip.py "$REL/encryption-${VERSION}-server-web.zip" . \
+  server web deploy tools docs README.md \
+  --exclude '**/__pycache__/**' --exclude '*.pyc' --exclude '*.db' --exclude 'data/**' \
+  --exclude '**/node_modules/**' --exclude 'tools/publish/files/**' 
 
 # ── 2. Windows EXE ──────────────────────────────────────────────────────────
 if [ "$WITH_EXE" = 1 ]; then
@@ -92,7 +94,7 @@ Encryption ${VERSION} — что в архиве
   PUPPETEER_DIR=/tmp/ui bash tools/run_tests.sh  ещё и интерфейс в headless-браузере
 EOF
 
-( cd "$STAGE" && zip -qr "$REL/encryption-${VERSION}-all.zip" . )
+python3 tools/make_zip.py "$REL/encryption-${VERSION}-all.zip" "$STAGE"
 echo "  → всё в одном: $(du -h "$REL/encryption-${VERSION}-all.zip" | cut -f1)"
 rm -rf "$STAGE"
 
