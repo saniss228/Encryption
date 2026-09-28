@@ -18,6 +18,7 @@ from __future__ import annotations
 import hashlib
 import os
 import shutil
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -52,7 +53,13 @@ def make_server_data(root: Path) -> Path:
     (d / "files").mkdir(parents=True)
     (d / "media").mkdir()
     (d / "logs").mkdir()
-    (d / "encryption.db").write_bytes(os.urandom(120_000))
+    # настоящая база SQLite: так проверяется и сброс журнала WAL
+    con = sqlite3.connect(d / "encryption.db")
+    con.execute("CREATE TABLE messages(id TEXT PRIMARY KEY, cipher TEXT)")
+    con.executemany("INSERT INTO messages VALUES(?,?)",
+                    [(f"m{i}", os.urandom(60).hex()) for i in range(300)])
+    con.commit()
+    con.close()
     (d / ".jwt.key").write_text("секрет-сервера")
     (d / "files" / "aaaaaaaa-1111.blob").write_bytes(os.urandom(2_500_000))
     (d / "files" / "bbbbbbbb-2222.blob").write_bytes(b"\x00" * 1000 + os.urandom(500))
@@ -67,6 +74,23 @@ def main() -> int:
         print("══════ Резервная копия и перенос данных ══════")
         src = make_server_data(tmp)
         archive = tmp / "backup.encbak"
+
+        # ── 0. Свежие записи не должны оставаться в журнале SQLite ────────
+        db = src / "encryption.db"
+        con = sqlite3.connect(db)
+        con.execute("PRAGMA journal_mode=WAL")
+        con.execute("CREATE TABLE IF NOT EXISTS t(x)")
+        con.execute("INSERT INTO t VALUES ('после переноса должно быть на месте')")
+        con.commit()
+        con.close()
+        check("журнал SQLite сбрасывается в базу (wal_checkpoint)",
+              backup.checkpoint_database(src))
+        size_after = db.stat().st_size
+        check("записи из журнала попали в саму базу", size_after > 20_000, f"база {size_after} Б")
+        con = sqlite3.connect(db)
+        rows = con.execute("SELECT COUNT(*) FROM t").fetchone()[0]
+        con.close()
+        check("новая таблица читается после сброса журнала", rows == 1)
 
         # ── 1. Снятие копии ───────────────────────────────────────────────
         summary = backup.export_to_file(src, archive, PASSWORD,

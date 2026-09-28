@@ -33,6 +33,7 @@ import io
 import json
 import os
 import secrets
+import sqlite3
 import tarfile
 import time
 from pathlib import Path
@@ -264,6 +265,27 @@ def _iter_members(data_dir: Path) -> Iterator[Path]:
             yield Path(root) / name
 
 
+def checkpoint_database(data_dir: Path) -> bool:
+    """Переносит данные из журнала SQLite (WAL) в саму базу перед упаковкой.
+
+    Иначе копия формально целая, но часть свежих записей лежит в отдельном
+    файле -wal, и при переносе легко потерять их, если его не скопировать.
+    """
+    db = Path(data_dir) / "encryption.db"
+    if not db.exists():
+        return False
+    try:
+        con = sqlite3.connect(str(db), timeout=5)
+        try:
+            con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            con.commit()
+            return True
+        finally:
+            con.close()
+    except sqlite3.Error:
+        return False          # сервер может держать базу — работаем как есть
+
+
 def export_to_file(data_dir: Path, out_path: Path, password: str, *,
                    extra: dict | None = None, include_logs: bool = False,
                    progress: Callable[[int], None] | None = None) -> dict:
@@ -271,6 +293,7 @@ def export_to_file(data_dir: Path, out_path: Path, password: str, *,
     data_dir = Path(data_dir)
     if not data_dir.exists():
         raise BackupError(f"Каталог данных не найден: {data_dir}")
+    checkpoint_database(data_dir)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     files = 0
     file_bytes = 0
