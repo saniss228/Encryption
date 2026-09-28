@@ -31,6 +31,7 @@ mkdir -p "$REL/desktop" "$REL/android"
 rm -f "$REL/encryption-${VERSION}-server-web.zip"
 python3 tools/make_zip.py "$REL/encryption-${VERSION}-server-web.zip" . \
   server web deploy tools docs README.md \
+  START-ENCRYPTION-WINDOWS.cmd "ЗАПУСТИТЬ-МЕССЕНДЖЕР-WINDOWS.cmd" \
   --exclude '**/__pycache__/**' --exclude '*.pyc' --exclude '*.db' --exclude 'data/**' \
   --exclude '**/node_modules/**'
 
