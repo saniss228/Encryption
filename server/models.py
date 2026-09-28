@@ -189,6 +189,11 @@ class AdminSettingsRequest(BaseModel):
     welcome_note: str | None = Field(default=None, max_length=500)
 
 
+class AdminBackupRequest(BaseModel):
+    """Пароль, которым закрывается файл копии (его знает только владелец сервера)."""
+    password: str = Field(min_length=8, max_length=256)
+
+
 class CallCreateRequest(BaseModel):
     chat_id: str
     kind: Literal["audio", "video", "group"] = "audio"

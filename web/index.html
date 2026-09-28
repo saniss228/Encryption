@@ -33,6 +33,30 @@
         </div>
       </div>
 
+      <!-- Выбор сервера: официальный или свой (с вводом адреса) -->
+      <div class="server-pick" id="serverPick">
+        <div class="sp-head">
+          <span class="muted small" data-i18n="auth.server.label">Сервер</span>
+          <span class="badge" id="serverPickState">…</span>
+        </div>
+        <div class="tabs small" id="serverTabs">
+          <button class="tab active" type="button" data-srv="official" data-i18n="auth.server.official">Официальные серверы</button>
+          <button class="tab" type="button" data-srv="custom" data-i18n="auth.server.custom">Свой сервер</button>
+        </div>
+        <div id="serverOfficialBox" class="server-box">
+          <select id="serverList" class="srv-select" data-i18n-title="auth.server.choose"></select>
+        </div>
+        <div id="serverCustomBox" class="server-box hidden">
+          <div class="sp-row">
+            <input id="serverCustomInput" placeholder="http://1.2.3.4:8080" autocomplete="off"
+                   spellcheck="false" data-i18n-ph="auth.server.placeholder">
+            <button class="btn primary" type="button" id="serverCustomApply" data-i18n="auth.server.connect">Подключиться</button>
+          </div>
+          <p class="muted small" data-i18n="auth.server.hint"></p>
+        </div>
+        <p class="muted small sp-migrate" data-i18n="auth.server.migrateHint"></p>
+      </div>
+
       <div class="tabs" id="authTabs">
         <button class="tab active" data-tab="login" data-i18n="auth.tab.login">Вход</button>
         <button class="tab" data-tab="register" data-i18n="auth.tab.register">Регистрация</button>

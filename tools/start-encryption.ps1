@@ -233,7 +233,10 @@ $url = "http://127.0.0.1:$Port/"
 $job = Start-Job -ScriptBlock {
     param($py, $root)
     Set-Location $root
-    & $py '-m' 'server.app'
+    # Пишем журнал сервера в обычный поток вывода: иначе PowerShell 5.1
+    # превращает каждую строку INFO в «ошибку» и скрипт падает.
+    $ErrorActionPreference = 'Continue'
+    & $py '-m' 'server.app' 2>&1
 } -ArgumentList $VenvPy, $Root
 
 $ready = $false
@@ -266,9 +269,17 @@ Say ''
 # Показываем вывод сервера «в живую» и ждём Ctrl+C
 try {
     while ($true) {
-        Receive-Job $job | ForEach-Object { Write-Host $_ }
+        # -ErrorAction Continue: строки журнала сервера не должны прерывать цикл
+        Receive-Job $job -ErrorAction Continue -ErrorVariable jobErr 2>$null | ForEach-Object {
+            if ($_ -is [System.Management.Automation.ErrorRecord]) { Write-Host "$_" -ForegroundColor DarkGray }
+            else { Write-Host $_ }
+        }
         if ($job.State -eq 'Completed' -or $job.State -eq 'Failed') { break }
         Start-Sleep -Milliseconds 700
+    }
+    if ($job.State -eq 'Failed') {
+        Warn '⚠ Сервер остановился с ошибкой. Вывод выше.'
+        Read-Host 'Нажмите Enter, чтобы закрыть'
     }
 } finally {
     Say ''

@@ -38,6 +38,119 @@
   App.openSettings = (t) => openSettings(t);
   App.serverBase = null;
 
+  /* ══ Серверы: официальный и свой ════════════════════════════════════════ */
+  // Официальный сервер проекта. Свои адреса пользователь вводит сам — они
+  // сохраняются на устройстве и применяются при следующем входе.
+  const OFFICIAL_SERVERS = [
+    { url: 'http://45.90.45.92', key: 'auth.server.officialMain' },
+  ];
+
+  function normalizeServer(input) {
+    let v = String(input || '').trim().replace(/\/+$/, '');
+    if (!v) return '';
+    if (!/^https?:\/\//i.test(v)) v = 'http://' + v;
+    try {
+      const u = new URL(v);
+      if (!u.hostname || !/^[\w.-]+$/.test(u.hostname)) return '';
+      return u.protocol + '//' + u.host;
+    } catch (e) { return ''; }
+  }
+
+  function officialServers() {
+    const list = [];
+    if (location.protocol.startsWith('http')) {
+      list.push({ url: location.origin, key: 'auth.server.officialThis' });
+    }
+    OFFICIAL_SERVERS.forEach((o) => { if (!list.some((x) => x.url === o.url)) list.push(o); });
+    return list;
+  }
+
+  function savedServer() {
+    const s = Store.get('server', null);
+    return s && s.url ? s : null;
+  }
+
+  function prettyHost(url) {
+    return String(url || '').replace(/^https?:\/\//, '');
+  }
+
+  async function pingServer(url, timeoutMs) {
+    const base = String(url || '').replace(/\/+$/, '');
+    if (!base) return null;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs || 4000);
+    try {
+      const r = await fetch(base + '/api/v1/health', { signal: ctrl.signal, cache: 'no-store' });
+      const j = await r.json();
+      return j && j.status === 'ok' ? j : null;
+    } catch (e) {
+      return null;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /** Проверяет адрес, сохраняет выбор и перезапускает клиент на новом сервере. */
+  async function useServer(input, opts) {
+    const quiet = !!(opts && opts.quiet);
+    const url = normalizeServer(input);
+    if (!url) {
+      if (!quiet) toast(T('auth.server.badAddress'), 'err', 6000);
+      return false;
+    }
+    const health = await pingServer(url);
+    if (!health) {
+      if (!quiet) toast(T('auth.server.unreachable'), 'err', 7000);
+      return false;
+    }
+    const mode = officialServers().some((x) => x.url === url) ? 'official' : 'custom';
+    Store.set('server', { url, mode, saved_at: Date.now() });
+    // Нативные оболочки (ПК и Android) держат адрес у себя — сообщаем и им
+    try {
+      if (window.NATIVE_APP && window.NATIVE_APP.setServer) await window.NATIVE_APP.setServer(url);
+      if (window.AndroidNative && window.AndroidNative.setServer) window.AndroidNative.setServer(url);
+    } catch (e) { /* оболочка может не поддерживать — не мешаем входу */ }
+    if (!quiet) toast(T('settings.saved'), 'ok');
+    setTimeout(() => location.reload(), 500);
+    return true;
+  }
+
+  function renderServerPicker() {
+    const list = $('serverList');
+    if (!list || !$('serverTabs')) return;
+    const saved = savedServer();
+    const current = App.serverBase || '';
+    const options = officialServers().map((s) =>
+      `<option value="${esc(s.url)}">${esc(T(s.key))} — ${esc(prettyHost(s.url))}</option>`);
+    if (saved && !officialServers().some((x) => x.url === saved.url)) {
+      options.push(`<option value="${esc(saved.url)}">${esc(T('auth.server.custom'))} — ${esc(prettyHost(saved.url))}</option>`);
+    }
+    list.innerHTML = options.join('');
+    if ([...list.options].some((o) => o.value === current)) list.value = current;
+
+    const setMode = (mode) => {
+      $('serverTabs').querySelectorAll('.tab').forEach((b) =>
+        b.classList.toggle('active', b.dataset.srv === mode));
+      $('serverOfficialBox').classList.toggle('hidden', mode !== 'official');
+      $('serverCustomBox').classList.toggle('hidden', mode !== 'custom');
+    };
+    $('serverTabs').querySelectorAll('.tab').forEach((b) => {
+      b.onclick = () => setMode(b.dataset.srv);
+    });
+    setMode(saved && saved.mode === 'custom' ? 'custom' : 'official');
+    $('serverCustomInput').value = saved && saved.mode === 'custom' ? saved.url : '';
+    list.onchange = () => { if (list.value !== current) useServer(list.value); };
+    $('serverCustomApply').onclick = () => useServer($('serverCustomInput').value);
+    $('serverCustomInput').onkeydown = (e) => { if (e.key === 'Enter') useServer(e.target.value); };
+
+    const state = $('serverPickState');
+    pingServer(current).then((h) => {
+      if (!state) return;
+      state.textContent = h ? T('auth.server.online') : T('auth.server.offline');
+      state.className = 'badge ' + (h ? 'ok' : 'bad');
+    });
+  }
+
   /* ══ Инициализация ══════════════════════════════════════════════════════ */
   async function init() {
     App.settings = Store.settings();
@@ -46,11 +159,15 @@
     renderFeatureGrid();
     bindStaticHandlers();
 
-    // Адрес сервера: в нативном приложении он задаётся оболочкой, на сайте — своим origin
-    App.serverBase = window.__SERVER_BASE__ ||
-      (window.NATIVE_APP && window.NATIVE_APP.serverBase) ||
-      (location.protocol.startsWith('http') ? location.origin : 'http://45.90.45.92');
+    // Адрес сервера по приоритету: оболочка приложения → выбор пользователя →
+    // адрес, с которого открыт сайт → официальный сервер.
+    const picked = savedServer();
+    App.serverBase = normalizeServer(window.__SERVER_BASE__) ||
+      normalizeServer(window.NATIVE_APP && window.NATIVE_APP.serverBase) ||
+      normalizeServer(picked && picked.url) ||
+      (location.protocol.startsWith('http') ? location.origin : OFFICIAL_SERVERS[0].url);
     App.api = new Api(App.serverBase);
+    renderServerPicker();          // рисовать выбор сервера можно только зная адрес
     const badge = $('serverBadge');
     try {
       const h = await App.api.get('/api/v1/health');
@@ -1220,6 +1337,7 @@
         <button class="tab ${tab === 'devices' ? 'active' : ''}" data-st="devices">${esc(T('settings.tab.devices'))}</button>
         <button class="tab ${tab === 'files' ? 'active' : ''}" data-st="files">${esc(T('settings.tab.files'))}</button>
         <button class="tab ${tab === 'app' ? 'active' : ''}" data-st="app">${esc(T('settings.tab.app'))}</button>
+        <button class="tab ${tab === 'server' ? 'active' : ''}" data-st="server">${esc(T('settings.tab.server'))}</button>
       </div>
       <div id="settingsBody"></div>`, { actions: false });
     body.querySelectorAll('[data-st]').forEach((b) => { b.onclick = () => openSettings(b.dataset.st); });
@@ -1247,6 +1365,35 @@
           fillAvatar($('meAvatar'), App.user);
           toast(T('settings.profileUpdated'), 'ok');
         } catch (e) { toast(e.message || T('conn.error'), 'err'); }
+      };
+      return;
+    }
+
+    if (tab === 'server') {
+      const cur = App.serverBase || '';
+      const saved = savedServer();
+      const official = officialServers();
+      host.innerHTML = `
+        <h3>${esc(T('settings.server.title'))}</h3>
+        ${row(T('settings.server.current'), prettyHost(cur))}
+        ${row(T('settings.server.mode'), saved && saved.mode === 'custom'
+              ? T('auth.server.custom') : T('auth.server.official'))}
+        <p class="muted small">${esc(T('settings.server.hint'))}</p>
+        <label>${esc(T('settings.server.address'))}
+          <input id="setServerUrl" value="${esc(cur)}" placeholder="http://1.2.3.4:8080"
+                 autocomplete="off" spellcheck="false"></label>
+        <button class="btn primary" id="setServerSave">${esc(T('settings.server.apply'))}</button>
+        <div class="row-between" style="margin-top:10px">
+          <button class="link" id="setServerOfficial">${esc(T('settings.server.toOfficial'))}</button>
+          <button class="link" id="setServerCheck">${esc(T('settings.server.check'))}</button>
+        </div>
+        <h3 style="margin-top:14px">${esc(T('settings.server.migrateTitle'))}</h3>
+        <p class="muted small">${esc(T('settings.server.migrate'))}</p>`;
+      $('setServerSave').onclick = () => useServer($('setServerUrl').value);
+      $('setServerOfficial').onclick = () => useServer(official[official.length - 1].url);
+      $('setServerCheck').onclick = async () => {
+        const h = await pingServer(cur);
+        toast(h ? T('auth.server.online') : T('auth.server.offline'), h ? 'ok' : 'err');
       };
       return;
     }

@@ -4,9 +4,10 @@
 #    1) криптография (оба слоя, подпись, фраза восстановления, файлы)
 #    2) API end-to-end (регистрация, чат, доставка, файлы, восстановление)
 #    3) файлы: удаление с сервера после скачивания получателем
-#    4) UI в headless-браузере (два независимых профиля = два устройства)
-#    5) админ-панель: API (права saniss, блокировка, рассылка, настройки)
-#    6) админ-панель: интерфейс в браузере (свой сервер, все локализации)
+#    4) резервная копия и перенос данных на другой сервер
+#    5) UI в headless-браузере (два независимых профиля = два устройства)
+#    6) админ-панель: API (права saniss, блокировка, копия данных, рассылка)
+#    7) админ-панель: интерфейс в браузере (свой сервер, все локализации)
 #
 #  Запуск:  bash tools/run_tests.sh
 #  Требуется: node 18+, python3, зависимости сервера (server/requirements.txt)
@@ -20,11 +21,11 @@ export ENC_BASE="http://127.0.0.1:$PORT"
 DATA="$(mktemp -d)"
 PASS=0; FAIL=0
 
-echo "══════ 1/6 Криптографическое ядро ══════"
+echo "══════ 1/7 Криптографическое ядро ══════"
 if node "$ROOT/tools/tests/test_crypto.mjs"; then PASS=$((PASS+1)); else FAIL=$((FAIL+1)); fi
 
 echo
-echo "══════ 2/6 API end-to-end (тестовый сервер на :$PORT) ══════"
+echo "══════ 2/7 API end-to-end (тестовый сервер на :$PORT) ══════"
 ENC_PORT="$PORT" ENC_DATA_DIR="$DATA" python3 -m server.app >"$DATA/server.log" 2>&1 &
 SRV=$!
 trap 'kill $SRV 2>/dev/null' EXIT
@@ -35,11 +36,19 @@ done
 if node "$ROOT/tools/tests/test_api_e2e.mjs"; then PASS=$((PASS+1)); else FAIL=$((FAIL+1)); fi
 
 echo
-echo "══════ 3/6 Файлы: удаление с сервера после скачивания («только локально») ══════"
+echo "══════ 3/7 Файлы: удаление с сервера после скачивания («только локально») ══════"
 if python3 "$ROOT/tools/test_local_only.py" "$ENC_BASE"; then PASS=$((PASS+1)); else FAIL=$((FAIL+1)); fi
 
 echo
-echo "══════ 4/6 UI end-to-end (headless Chrome) ══════"
+echo "══════ 4/7 Резервная копия и перенос данных ══════"
+if python3 "$ROOT/tools/test_backup.py" >/tmp/enc-backup-test.log 2>&1; then
+  PASS=$((PASS+1)); tail -2 /tmp/enc-backup-test.log | head -1
+else
+  FAIL=$((FAIL+1)); tail -8 /tmp/enc-backup-test.log
+fi
+
+echo
+echo "══════ 5/7 UI end-to-end (headless Chrome) ══════"
 PUP="${PUPPETEER_DIR:-}"
 if [ -n "$PUP" ] && [ -d "$PUP/node_modules/puppeteer" ]; then
   # Скрипты копируем рядом с node_modules: ESM ищет пакеты от своего файла, а не от cwd
@@ -52,11 +61,11 @@ else
 fi
 
 echo
-echo "══════ 5/6 Админ-панель: API (логин saniss) ══════"
+echo "══════ 6/7 Админ-панель: API (логин saniss) ══════"
 if python3 "$ROOT/tools/test_admin.py" "$ENC_BASE"; then PASS=$((PASS+1)); else FAIL=$((FAIL+1)); fi
 
 echo
-echo "══════ 6/6 Админ-панель: интерфейс в браузере ══════"
+echo "══════ 7/7 Админ-панель: интерфейс в браузере ══════"
 if [ -n "$PUP" ] && [ -d "$PUP/node_modules/puppeteer" ]; then
   cp "$ROOT/tools/tests/test_admin_ui.mjs" "$PUP/"
   (cd "$PUP" && ENC_ROOT="$ROOT" node test_admin_ui.mjs) && PASS=$((PASS+1)) || FAIL=$((FAIL+1))

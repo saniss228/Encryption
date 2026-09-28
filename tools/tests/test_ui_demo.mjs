@@ -14,6 +14,30 @@ console.log('1. Плашка состояния:', badge, '| техническ�
 const langOptions = await page.$$eval('#langSelectAuth option', (els) => els.map((e) => e.value));
 console.log('   языки в интерфейсе:', langOptions.join(', '));
 
+// Выбор сервера: официальный из списка или свой адрес
+const picker = await page.evaluate(() => {
+  const tabs = [...document.querySelectorAll('#serverTabs .tab')].map((b) => b.textContent.trim());
+  const opts = [...document.querySelectorAll('#serverList option')].map((o) => o.textContent.trim());
+  return { tabs, opts, state: (document.querySelector('#serverPickState') || {}).textContent };
+});
+console.log('1.1 Выбор сервера:', picker.tabs.join(' / '), '| список:', picker.opts.join(', '),
+  '| состояние:', picker.state);
+await page.click('#serverTabs .tab[data-srv=custom]');
+const customVisible = await page.$eval('#serverCustomBox', (el) => !el.classList.contains('hidden'));
+await page.type('#serverCustomInput', 'нет-такого-сервера-12345');
+await page.click('#serverCustomApply');
+await new Promise((r) => setTimeout(r, 1500));
+const badToast = await page.$$eval('.toasts .toast', (els) => els.map((e) => e.textContent).join(' '));
+console.log('1.2 Свой сервер: поле ввода видно:', customVisible,
+  '| ошибка на неверный адрес:', /не отвечает|No response|no responde|Antwortet nicht/i.test(badToast) ? 'есть' : 'НЕТ');
+await page.$eval('#serverCustomInput', (el) => { el.value = ''; });
+await page.type('#serverCustomInput', BASE);
+await page.click('#serverCustomApply');
+await new Promise((r) => setTimeout(r, 2000));
+const savedSrv = await page.evaluate(() => localStorage.getItem('encryption.server'));
+console.log('1.3 Свой сервер сохранён:', savedSrv || 'нет');
+await page.evaluate(() => localStorage.removeItem('encryption.server'));
+
 // Демо-режим (сервер эмулируется в браузере — но шифрование настоящее)
 await page.click('#demoBtn');
 await page.waitForSelector('#mainScreen:not(.hidden)', { timeout: 30000 });

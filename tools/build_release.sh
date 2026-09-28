@@ -97,6 +97,12 @@ Encryption ${VERSION} — что в архиве
   tools/start-encryption.ps1         PowerShell: -Port -BindHost -NoBrowser -Reinstall
   tools/start-server.sh              Linux/macOS: bash tools/start-server.sh [порт]
 
+ПЕРЕНОС ДАННЫХ НА ДРУГОЙ СЕРВЕР
+  Настройки → Админ-панель → «Данные и перенос» → «Скачать копию данных»
+  или в терминале:
+     python3 tools/migrate_server.py export --out encryption-backup.encbak
+     python3 tools/migrate_server.py import encryption-backup.encbak --force
+
 ПРОВЕРКА
   bash tools/run_tests.sh                        крипто + API + «только локально» + админ-панель
   PUPPETEER_DIR=/tmp/ui bash tools/run_tests.sh  ещё и интерфейс в headless-браузере

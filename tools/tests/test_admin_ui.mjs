@@ -14,7 +14,7 @@
  */
 import puppeteer from 'puppeteer';
 import { spawn } from 'node:child_process';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -125,7 +125,8 @@ try {
   await page.waitForSelector('#admReg', { timeout: 10000 });
   const envRows = await page.$$eval('#admBody .adm-kv', (els) => els.map((e) => e.textContent));
   check('видны параметры сервера и список администраторов',
-    envRows.some((r) => r.includes('saniss')) && envRows.some((r) => /3\.1\.0/.test(r)), envRows.length + ' строк');
+    envRows.some((r) => r.includes('saniss')) && envRows.some((r) => /\d+\.\d+\.\d+/.test(r)),
+    envRows.length + ' строк');
 
   // ── 6. Журнал и файлы ────────────────────────────────────────────────────
   await page.evaluate(() => Admin.open('audit'));
@@ -135,6 +136,42 @@ try {
   await page.evaluate(() => Admin.open('files'));
   await page.waitForSelector('#admPurge', { timeout: 10000 });
   check('раздел файлов открывается', true);
+
+  // ── 6.1. Данные и перенос: выгрузка копии прямо из панели ────────────────
+  const dl = mkdtempSync(join(tmpdir(), 'enc-dl-'));
+  const cdp = await page.createCDPSession();
+  await cdp.send('Page.setDownloadBehavior', { behavior: 'allow', downloadPath: dl });
+  await page.evaluate(() => Admin.open('data'));
+  await page.waitForSelector('#admBkPwd', { timeout: 15000 });
+  const dataInfo = await page.evaluate(() => document.querySelector('#admBody').textContent);
+  check('раздел «Данные и перенос» показывает состав копии',
+    /Аккаунтов|Chats|Аккаунт/i.test(dataInfo) && /Объём данных/i.test(dataInfo));
+  await page.type('#admBkPwd', 'копия-тест-2026');
+  await page.type('#admBkPwd2', 'копия-тест-2026');
+  await page.click('#admBkExport');
+  let backupFile = null;
+  for (let i = 0; i < 60; i++) {
+    await sleep(500);
+    const files = readdirSync(dl).filter((f) => f.endsWith('.encbak'));
+    if (files.length) { backupFile = join(dl, files[0]); break; }
+  }
+  check('копия скачивается из админ-панели', !!backupFile,
+    backupFile ? `${(statSync(backupFile).size / 1024).toFixed(0)} КБ` : 'файла нет');
+  if (backupFile) {
+    const head = readFileSync(backupFile).subarray(0, 7).toString('latin1');
+    check('скачанный файл — шифрованная копия (ENCBK1)', head === 'ENCBK1\n', JSON.stringify(head));
+    const { execFileSync } = await import('node:child_process');
+    try {
+      execFileSync('python3', [join(ROOT, 'tools/migrate_server.py'), 'verify', backupFile],
+        { env: { ...process.env, ENC_BACKUP_PASSWORD: 'копия-тест-2026' }, stdio: 'pipe' });
+      check('копия, скачанная из браузера, проверяется утилитой', true);
+    } catch (e) {
+      check('копия, скачанная из браузера, проверяется утилитой', false, String(e.message).slice(0, 60));
+    }
+    await page.evaluate(async () => {
+      await App.api.del('/api/v1/admin/backup/files');
+    });
+  }
 
   // ── 7. Локализации ───────────────────────────────────────────────────────
   for (const [loc, expect, tab] of [['en', 'Admin panel', 'users'], ['es', 'Panel de administración', 'users'],

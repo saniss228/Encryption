@@ -1,4 +1,4 @@
-# API Encryption v3.1.0
+# API Encryption v3.2.0
 
 Полный справочник по HTTP и WebSocket API сервера **Encryption**.
 Сервер ничего не знает о содержимом сообщений: он принимает и хранит только
@@ -14,7 +14,7 @@
 | Внутренний порт бэкенда | `6000` (uvicorn, за nginx) |
 | Формат | JSON (`Content-Type: application/json`), файлы — октет-поток |
 | Версия API | `v1` (`/api/v1/...`) |
-| Версия продукта | `3.1.0` |
+| Версия продукта | `3.2.0` |
 | Аутентификация | `Authorization: Bearer <access_token>` |
 | Время жизни access-токена | 15 минут |
 | Время жизни refresh-токена | 30 дней (ротация при каждом обновлении) |
@@ -22,7 +22,7 @@
 | «Один аккаунт на устройство» | жёсткая привязка `device_id`, освобождение — карантин 30 дней |
 | Администратор | логины из `ENC_ADMINS` (по умолчанию `saniss`) → раздел 9.1 |
 
-Здоровье сервиса: `GET /api/v1/health` → `{"status":"ok","version":"3.1.0","file_ttl_hours":24,...}`
+Здоровье сервиса: `GET /api/v1/health` → `{"status":"ok","version":"3.2.0","file_ttl_hours":24,...}`
 
 ### Формат ошибок
 
@@ -105,7 +105,7 @@
     "ik_dh_pub": "…", "ik_sign_pub": "…", "rsa_pub": "…",
     "spk_pub": "…", "spk_sig": "…", "one_time_keys": ["…"]
   },
-  "device": { "device_id": "0f6a…e1", "name": "Ноутбук", "platform": "web", "app_version": "3.1.0" },
+  "device": { "device_id": "0f6a…e1", "name": "Ноутбук", "platform": "web", "app_version": "3.2.0" },
   "key_backup": { "alg": "AES-256-GCM", "iv": "…", "ct": "…" },
   "recovery":  { "alg": "Argon2id+AES-GCM", "iv": "…", "ct": "…" }
 }
@@ -339,7 +339,7 @@
 
 | Метод | Путь | Ответ |
 |---|---|---|
-| `GET` | `/api/v1/health` | `{"status":"ok","app":"Encryption","version":"3.1.0","file_ttl_hours":24}` |
+| `GET` | `/api/v1/health` | `{"status":"ok","app":"Encryption","version":"3.2.0","file_ttl_hours":24}` |
 | `GET` | `/api/v1/security/policy` | четыре слоя защиты и правила хранения файлов |
 | `GET` | `/api/v1/site/info` | сведения для клиента (версия, лимиты) |
 | `GET` | `/` | сайт (одностраничный клиент) |

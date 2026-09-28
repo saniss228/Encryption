@@ -18,20 +18,25 @@
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import shutil
+import time
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import FileResponse
 
 from .. import db
-from ..config import (ADMIN_USERNAMES, FILE_TTL_HOURS, FILES_DIR, GROUP_MAX_MEMBERS,
+from ..config import (ADMIN_USERNAMES, DATA_DIR, FILE_TTL_HOURS, FILES_DIR, GROUP_MAX_MEMBERS,
                       MAX_MESSAGE_BYTES, RATE_LIMIT_PER_MIN, FILE_MAX_BYTES, VERSION)
-from ..models import (AdminBroadcastRequest, AdminRoleRequest, AdminSettingsRequest,
-                      AdminUserActionRequest)
+from ..models import (AdminBackupRequest, AdminBroadcastRequest, AdminRoleRequest,
+                      AdminSettingsRequest, AdminUserActionRequest)
 from ..realtime import hub
 from ..security import current_session, require_admin
 from ._common import fanout
+from .files import _BackgroundHook
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
 client_router = APIRouter(prefix="/api/v1", tags=["common"])
@@ -504,6 +509,98 @@ async def put_settings(body: AdminSettingsRequest, sess: dict = Depends(require_
         changed["welcome_note"] = body.welcome_note[:500]
     await db.audit("admin_settings", actor=int(actor["id"]), changed=changed)
     return {"ok": True, "changed": changed}
+
+
+# ── Резервная копия и перенос данных на другой сервер ───────────────────────
+async def _unlink(path: Path) -> None:
+    """Убирает файл копии с сервера после того, как он скачан."""
+    try:
+        path.unlink()
+    except OSError:
+        pass
+
+
+def _data_stats() -> dict[str, Any]:
+    """Что именно попадёт в копию: размер базы, файлов, медиа."""
+    def dir_size(p) -> tuple[int, int]:
+        files = 0
+        total = 0
+        if p.exists():
+            for item in p.rglob("*"):
+                if item.is_file():
+                    files += 1
+                    try:
+                        total += item.stat().st_size
+                    except OSError:
+                        pass
+        return files, total
+
+    db_path = DATA_DIR / "encryption.db"
+    db_size = db_path.stat().st_size if db_path.exists() else 0
+    f_count, f_size = dir_size(FILES_DIR)
+    m_count, m_size = dir_size(DATA_DIR / "media")
+    return {"database_bytes": db_size, "files": f_count, "files_bytes": f_size,
+            "media_files": m_count, "media_bytes": m_size,
+            "total_bytes": db_size + f_size + m_size}
+
+
+@router.get("/backup/info")
+async def backup_info(sess: dict = Depends(require_admin)):
+    """Сколько данных уйдёт в копию и как её перенести."""
+    one = await db.fetchone("SELECT COUNT(*) c FROM users")
+    chats = await db.fetchone("SELECT COUNT(*) c FROM chats")
+    msgs = await db.fetchone("SELECT COUNT(*) c FROM messages")
+    return {
+        "stats": _data_stats(),
+        "contents": {"users": int(one["c"]), "chats": int(chats["c"]), "messages": int(msgs["c"])},
+        "min_password": 8,
+        "note": ("Копия шифруется вашим паролем (AES-256-GCM, PBKDF2-SHA512). "
+                 "Содержимое переписки в базе и так зашифровано ключами устройств — "
+                 "прочитать его не сможет никто, включая администратора."),
+        "how_to": [
+            "Скачайте файл копии и сохраните в надёжном месте (пароль запомните — "
+            "восстановить его нельзя).",
+            "На новом сервере распакуйте проект и остановите сервер.",
+            "Выполните: python3 tools/migrate_server.py import файл.encbak --force",
+            "Запустите сервер: bash tools/start-server.sh (или ЗАПУСТИТЬ-МЕССЕНДЖЕР-WINDOWS.cmd).",
+            "В приложении на телефоне/ПК выберите «Настройки → Сервер» и укажите адрес нового сервера.",
+        ],
+    }
+
+
+@router.post("/backup/export")
+async def backup_export(body: AdminBackupRequest, sess: dict = Depends(require_admin)):
+    """Отдаёт зашифрованную копию данных сервера одним файлом."""
+    from .. import backup as backup_mod
+
+    actor = sess["user"]
+    stamp = time.strftime("%Y-%m-%d-%H%M")
+    out = DATA_DIR / "backups" / f"encryption-backup-{stamp}.encbak"
+    try:
+        summary = await asyncio.to_thread(
+            backup_mod.export_to_file, DATA_DIR, out, body.password,
+            extra={"server_version": VERSION, "admin": actor["username"]})
+    except backup_mod.BackupError as exc:
+        raise HTTPException(status_code=400, detail={"code": "BACKUP_FAILED", "message": str(exc)})
+    await db.audit("admin_backup_export", actor=int(actor["id"]),
+                   files=summary["files"], bytes=summary["file_bytes"])
+    return FileResponse(out, media_type="application/octet-stream",
+                        filename=out.name, background=_BackgroundHook(_unlink(out)))
+
+
+@router.delete("/backup/files")
+async def backup_cleanup(sess: dict = Depends(require_admin)):
+    """Удаляет скачанные копии с сервера (в файле всё равно только шифротекст)."""
+    folder = DATA_DIR / "backups"
+    removed = 0
+    if folder.exists():
+        for f in folder.glob("*.encbak"):
+            try:
+                f.unlink()
+                removed += 1
+            except OSError:
+                pass
+    return {"ok": True, "removed": removed}
 
 
 # ── Клиентская точка: объявления и публичные флаги ──────────────────────────

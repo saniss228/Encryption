@@ -42,7 +42,7 @@
       <div class="tabs small" id="admTabs">
         ${[['overview', T('admin.tab.overview')], ['users', T('admin.tab.users')], ['chats', T('admin.tab.chats')],
            ['files', T('admin.tab.files')], ['audit', T('admin.tab.audit')], ['broadcast', T('admin.tab.broadcast')],
-           ['settings', T('admin.tab.settings')]]
+           ['data', T('admin.tab.data')], ['settings', T('admin.tab.settings')]]
           .map(([k, l]) => `<button class="tab ${Admin.tab === k ? 'active' : ''}" data-adm="${k}">${esc(l)}</button>`).join('')}
       </div>
       <p class="adm-note">🔒 ${esc(T('admin.encryptionNote'))}</p>
@@ -62,6 +62,7 @@
       else if (Admin.tab === 'files') await renderFiles(host);
       else if (Admin.tab === 'audit') await renderAudit(host);
       else if (Admin.tab === 'broadcast') await renderBroadcast(host);
+      else if (Admin.tab === 'data') await renderData(host);
       else if (Admin.tab === 'settings') await renderSettings(host);
     } catch (e) {
       host.innerHTML = `<p class="badge bad">${esc(e.message || T('conn.error'))}</p>`;
@@ -340,6 +341,79 @@
   }
 
   /* ── Настройки сервера ─────────────────────────────────────────────────── */
+
+  /* ── Данные и перенос на другой сервер ─────────────────────────────────── */
+  async function renderData(host) {
+    const d = await api('/api/v1/admin/backup/info');
+    const st = d.stats || {};
+    const total = (st.database_bytes || 0) + (st.files_bytes || 0) + (st.media_bytes || 0);
+    host.innerHTML = `
+      <h3>${esc(T('admin.data.title'))}</h3>
+      <div class="adm-grid">
+        <div class="adm-card"><small>${esc(T('admin.data.users'))}</small><b>${d.contents.users}</b></div>
+        <div class="adm-card"><small>${esc(T('admin.data.chats'))}</small><b>${d.contents.chats}</b></div>
+        <div class="adm-card"><small>${esc(T('admin.data.messages'))}</small><b>${d.contents.messages}</b></div>
+        <div class="adm-card"><small>${esc(T('admin.data.size'))}</small><b>${esc(size(total))}</b>
+          <em>${esc(T('admin.data.files'))}: ${st.files} · ${esc(T('admin.data.database'))}: ${esc(size(st.database_bytes))}</em></div>
+      </div>
+      <p class="adm-note">🔐 ${esc(d.note)}</p>
+      <label style="margin-top:8px">${esc(T('admin.data.password'))}
+        <input id="admBkPwd" type="password" autocomplete="new-password" placeholder="••••••••"></label>
+      <label>${esc(T('admin.data.password2'))}
+        <input id="admBkPwd2" type="password" autocomplete="new-password" placeholder="••••••••"></label>
+      <div class="row-between" style="margin-top:8px">
+        <button class="btn primary" id="admBkExport">${esc(T('admin.data.download'))}</button>
+        <button class="btn ghost" id="admBkClean">${esc(T('admin.data.cleanup'))}</button>
+      </div>
+      <h3 style="margin-top:14px">${esc(T('admin.data.howTo'))}</h3>
+      <ol class="adm-list">${(d.how_to || []).map((t) => `<li>${esc(t)}</li>`).join('')}</ol>
+      <p class="muted small">${esc(T('admin.data.migrateNote'))}</p>`;
+
+    $('admBkExport').onclick = async () => {
+      const pwd = $('admBkPwd').value;
+      const pwd2 = $('admBkPwd2').value;
+      if (pwd.length < (d.min_password || 8)) return toast(T('admin.data.shortPassword'), 'err', 6000);
+      if (pwd !== pwd2) return toast(T('admin.data.passwordMismatch'), 'err', 6000);
+      const btn = $('admBkExport');
+      btn.disabled = true;
+      btn.textContent = T('admin.data.packing');
+      try {
+        const res = await fetch(App.serverBase + '/api/v1/admin/backup/export', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + App.api.access },
+          body: JSON.stringify({ password: pwd }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error((err.error && err.error.message) || ('HTTP ' + res.status));
+        }
+        const blob = await res.blob();
+        const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'encryption-backup-' + stamp + '.encbak';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+        $('admBkPwd').value = ''; $('admBkPwd2').value = '';
+        toast(T('admin.data.downloaded'), 'ok', 8000);
+      } catch (e) {
+        toast(e.message || T('conn.error'), 'err', 7000);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = T('admin.data.download');
+      }
+    };
+
+    $('admBkClean').onclick = async () => {
+      if (!(await confirmDialog(T('admin.data.cleanup'), T('admin.data.cleanupAsk'), T('admin.data.cleanup'), true))) return;
+      try {
+        const r = await App.api.del('/api/v1/admin/backup/files');
+        toast(T('admin.data.cleaned', { n: r.removed }), 'ok');
+      } catch (e) { toast(e.message || T('conn.error'), 'err'); }
+    };
+  }
+
   async function renderSettings(host) {
     const d = await api('/api/v1/admin/settings');
     Admin.ctx.settings = d.settings;

@@ -1,6 +1,6 @@
 # 🔐 Encryption — защищённый мессенджер с двойным шифрованием
 
-**Версия 3.1.0.** Три клиента — **сайт**, **приложение для ПК** и **приложение для Android** —
+**Версия 3.2.0.** Три клиента — **сайт**, **приложение для ПК** и **приложение для Android** —
 на одном сервере с одним и тем же криптографическим ядром. Каждое сообщение шифруется
 **дважды**, файлы живут **ровно 24 часа** и **навсегда удаляются с сервера сразу после
 скачивания получателем** (в интерфейсе — метка **«Только локально / Local only»**),
@@ -25,14 +25,27 @@
 
 | Версия | Файл | Размер | Установка |
 |---|---|---|---|
-| 🎁 **Один архив со всем** | `release/encryption-3.1.0-all.zip` | 83 МБ | сервер + сайт + ПК + Android + инструкция |
-| 🌐 **Сайт** | `web/` + сервер (`release/encryption-3.1.0-server-web.zip`) | ~2 МБ | запускается тем же сервером, открывать через nginx: `http://45.90.45.92/` |
-| 🖥 **ПК (Windows)** | `Encryption-3.1.0-win-x64-portable.exe` (внутри архива «всё в одном») | 69 МБ | просто запустить, установка не нужна (portable) |
+| 🎁 **Один архив со всем** | `release/encryption-3.2.0-all.zip` | ~73 МБ | сервер + сайт + ПК + Android + инструкция |
+| 🌐 **Сайт** | `web/` + сервер (`release/encryption-3.2.0-server-web.zip`) | ~1,5 МБ | запускается тем же сервером, открывать через nginx: `http://45.90.45.92/` |
+| 🖥 **ПК (Windows)** | `Encryption-3.2.0-win-x64-portable.exe` (внутри архива «всё в одном») | ~69 МБ | просто запустить, установка не нужна (portable) |
 | 🐧 **ПК (Linux)** | собирается командой `npm run build:linux` | ~108 МБ | `chmod +x` и запустить |
-| 📱 **Android** | `release/android/Encryption-3.1.0.apk` | 622 КБ | перекинуть на телефон и открыть (разрешить установку из неизвестных источников) |
+| 📱 **Android** | `release/android/Encryption-3.2.0.apk` | ~620 КБ | перекинуть на телефон и открыть (разрешить установку из неизвестных источников) |
 
 Все версии одним списком — на странице [**Releases**](https://github.com/saniss228/Encryption/releases):
-3.1.0 (сайт, ПК, Android) и предыдущие сборки 1.1.0 … 1.2.4.
+3.2.0 (сайт, ПК, Android) и предыдущие сборки 1.1.0 … 3.1.0.
+
+### Что нового в 3.2.0
+
+* **Выбор сервера при входе**: «Официальные серверы» (список) или «Свой сервер»
+  (ввод адреса) — с проверкой связи и запоминанием выбора на устройстве.
+  Раздел «Настройки → Сервер» меняет адрес и на уже настроенном приложении.
+* **Перенос данных на другой сервер**: «Настройки → Админ-панель → Данные и перенос →
+  Скачать копию данных». Один файл `*.encbak` содержит базу, файлы, медиа и ключи;
+  он зашифрован вашим паролем (AES-256-GCM, PBKDF2-SHA512 ×300 000).
+  Развёртывание на новом сервере — `python3 tools/migrate_server.py import файл.encbak --force`.
+* **Запуск на Windows без ошибок**: скрипт `ЗАПУСТИТЬ-МЕССЕНДЖЕР-WINDOWS.cmd` больше не
+  падает на журнале сервера в PowerShell 5.1.
+* Шифрование, форматы и API не изменились — версии совместимы.
 
 Ваш белый IP прописан по умолчанию во всех клиентах: `http://45.90.45.92`
 (через nginx, порт 80 → внутренний порт 6000).
@@ -50,7 +63,7 @@ sudo bash deploy/install.sh
 Скрипт поставит Python, nginx, systemd-службу и откроет порты. Проверка:
 
 ```bash
-curl -s http://127.0.0.1:6000/api/v1/health   # {"status":"ok","version":"3.1.0",...}
+curl -s http://127.0.0.1:6000/api/v1/health   # {"status":"ok","version":"3.2.0",...}
 ```
 
 Откройте `http://45.90.45.92/` — это сайт с мессенджером.
@@ -161,12 +174,12 @@ encryption/
 ```bash
 # Android APK (без Gradle: aapt2 → javac → d8 → zipalign → apksigner)
 bash tools/setup_toolchain.sh   # один раз: JDK 21 + Android SDK 34 → /opt/toolchain
-bash tools/build_apk.sh         # → release/android/Encryption-3.1.0.apk
+bash tools/build_apk.sh         # → release/android/Encryption-3.2.0.apk
 
 # Windows EXE (сборка на Linux требует 32-битный wine-префикс) и Linux AppImage
 cd desktop && npm install
-WINEPREFIX=/opt/toolchain/wine-prefix npm run build:win   # → release/desktop/Encryption-3.1.0-win-x64-portable.exe
-npm run build:linux                                       # → release/desktop/Encryption-3.1.0-linux-x64.AppImage
+WINEPREFIX=/opt/toolchain/wine-prefix npm run build:win   # → release/desktop/Encryption-3.2.0-win-x64-portable.exe
+npm run build:linux                                       # → release/desktop/Encryption-3.2.0-linux-x64.AppImage
 ```
 
 Ключ подписи APK создаётся автоматически (`android/keystore/encryption.keystore`,
@@ -180,6 +193,26 @@ npm run build:linux                                       # → release/desktop/
 4. **Нативный Kotlin-клиент** и мультиустройственная синхронизация истории.
 
 Полный список — в конце [`docs/FEATURES.md`](docs/FEATURES.md).
+
+## Перенос данных на свой сервер
+
+Администратор сервера (или владелец) может перевезти всё на другую машину:
+
+```bash
+# на старом сервере: копия всех данных в один зашифрованный файл
+python3 tools/migrate_server.py export --out encryption-backup.encbak
+
+# на новом сервере: проверка и развёртывание (сервер остановлен)
+python3 tools/migrate_server.py verify encryption-backup.encbak
+python3 tools/migrate_server.py import encryption-backup.encbak --force
+```
+
+То же самое из интерфейса: **Настройки → Админ-панель → Данные и перенос →
+Скачать копию данных** (пароль к копии задаётся там же).
+
+Важно про шифрование: содержимое переписки и файлов в копии остаётся закрытым
+ключами устройств — сервер их не знает и прочитать не может никто, включая
+администратора. Пароль к файлу копии восстановить нельзя, храните его отдельно.
 
 ## Запуск одной командой
 

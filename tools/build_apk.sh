@@ -11,7 +11,10 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 AND="$ROOT/android"
 OUT="$ROOT/release/android"
-APP_VERSION="3.1.0"
+# Версия берётся из server/config.py — единый источник для сервера, сайта и клиентов
+APP_VERSION="$(grep -oP 'VERSION = "\K[0-9.]+' "$ROOT/server/config.py" | head -1)"
+APP_VERSION="${APP_VERSION:-3.2.0}"
+VERSION_CODE="$(printf '%s' "$APP_VERSION" | awk -F. '{printf "%d", $1*10000 + $2*100 + $3}')"
 BUILD="$AND/build"
 
 # ── Пути к инструментам ───────────────────────────────────────────────────
@@ -60,7 +63,7 @@ echo "▶ 4/7 Линковка (aapt2 link) → base APK + R.java"
   $(find "$BUILD/compiled/flat" -name '*.flat' | sort) \
   -A "$AND/assets" \
   --min-sdk-version 23 --target-sdk-version 34 \
-  --version-code 4 --version-name "${APP_VERSION}" \
+  --version-code "${VERSION_CODE:-40200}" --version-name "${APP_VERSION}" \
   --no-version-vectors
 
 echo "▶ 5/7 Компиляция Java (javac)"

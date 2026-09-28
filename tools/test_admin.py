@@ -39,6 +39,20 @@ def call(method: str, path: str, body=None, token=None):
             return e.code, {"raw": raw[:200].decode("utf-8", "replace")}
 
 
+def call_raw(method: str, path: str, body=None, token=None) -> tuple[int, bytes]:
+    """То же, что call(), но для двоичных ответов (файл копии данных)."""
+    data = json.dumps(body).encode() if body is not None else None
+    req = urllib.request.Request(BASE + path, data=data, method=method)
+    req.add_header("Content-Type", "application/json")
+    if token:
+        req.add_header("Authorization", "Bearer " + token)
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r:
+            return r.status, r.read()
+    except urllib.error.HTTPError as e:
+        return e.code, e.read()
+
+
 def code_of(resp) -> str | None:
     if not isinstance(resp, dict):
         return None
@@ -185,6 +199,35 @@ def main() -> int:
 
     st, r = call("DELETE", f"/api/v1/admin/announcements/{ann_id}", token=admin_token)
     check("отключение объявления", st == 200 and r.get("active") is False, f"{st}")
+
+    # ── Резервная копия данных (перенос сервера) ────────────────────────────
+    st, r = call("GET", "/api/v1/admin/backup/info", token=admin_token)
+    check("сведения о копии данных", st == 200 and "stats" in r and r["stats"]["database_bytes"] > 0,
+          f"{st}, база {r.get('stats', {}).get('database_bytes', 0)} Б")
+    st, r = call("GET", "/api/v1/admin/backup/info")
+    check("обычному пользователю копия недоступна", st in (401, 403), f"{st}")
+
+    st, blob = call_raw("POST", "/api/v1/admin/backup/export", {"password": "копия-пароль-1"}, token=admin_token)
+    check("копия данных выгружается", st == 200 and len(blob) > 1000 and blob[:7] == b"ENCBK1\n",
+          f"{st}, {len(blob)} Б")
+    if st == 200 and blob[:7] == b"ENCBK1\n":
+        import tempfile, pathlib as _p
+        sys.path.insert(0, str(_p.Path(__file__).resolve().parent.parent))
+        from server import backup as _backup
+        tmp = _p.Path(tempfile.mkdtemp())
+        f = tmp / "api.encbak"
+        f.write_bytes(blob)
+        info = _backup.peek(f, "копия-пароль-1")
+        check("копия с сервера читается и цела",
+              info["files"] >= 1 and info["restored_bytes"] > 0,
+              f"файлов {info['files']}, {info['restored_bytes']} Б")
+        try:
+            _backup.peek(f, "другой-пароль-1")
+            check("копия с сервера не открывается чужим паролем", False, "открылась!")
+        except _backup.BackupError:
+            check("копия с сервера не открывается чужим паролем", True)
+        st, r = call("DELETE", "/api/v1/admin/backup/files", token=admin_token)
+        check("скачанные копии убираются с сервера", st == 200 and r.get("ok") is True, f"{st}")
 
     print(f"\n{'=' * 62}\nПройдено: {len(OK)}   Провалено: {len(FAIL)}")
     if FAIL:
