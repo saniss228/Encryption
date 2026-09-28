@@ -21,6 +21,10 @@ release/**/*.exe
 release/*.zip
 release/desktop/
 *.idsig
+release/*.bundle
 
 # Сгенерированные копии веб-клиента (создаёт tools/build_apk.sh)
 android/assets/www/
+
+# Черновая копия проекта для отправки на GitHub (tools/publish/publish-to-github.*)
+tools/publish/files/
