@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1020">
+<meta name="description" content="Encryption — защищённый мессенджер с двойным шифрованием">
+<title>Encryption</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/assets/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- ══ ЭКРАН ВХОДА ══ -->
+  <section id="authScreen" class="auth-screen">
+    <div class="auth-card">
+      <div class="auth-brand">
+        <svg viewBox="0 0 64 64" class="logo" aria-hidden="true">
+          <defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#4f8cff"/><stop offset="100%" stop-color="#7b5cff"/>
+          </linearGradient></defs>
+          <path d="M32 4 8 14v18c0 14 10 24 24 28 14-4 24-14 24-28V14L32 4z" fill="url(#lg)"/>
+          <path d="M22 30h20v14H22z" fill="#0b1020"/>
+          <path d="M26 30v-6a6 6 0 0 1 12 0v6" fill="none" stroke="#0b1020" stroke-width="4"/>
+          <circle cx="32" cy="37" r="2.6" fill="#4f8cff"/>
+        </svg>
+        <div>
+          <h1 data-i18n="app.name">Encryption</h1>
+          <p class="muted" data-i18n="app.tagline">Двойное шифрование</p>
+        </div>
+      </div>
+
+      <div class="tabs" id="authTabs">
+        <button class="tab active" data-tab="login" data-i18n="auth.tab.login">Вход</button>
+        <button class="tab" data-tab="register" data-i18n="auth.tab.register">Регистрация</button>
+        <button class="tab" data-tab="recover" data-i18n="auth.tab.recover">Забыли пароль?</button>
+      </div>
+
+      <!-- Вход -->
+      <form id="loginForm" class="auth-form">
+        <label><span data-i18n="auth.username">Логин</span>
+          <input name="username" autocomplete="username" data-i18n-ph="auth.usernamePlaceholder" required></label>
+        <label><span data-i18n="auth.password">Пароль</span>
+          <input name="password" type="password" autocomplete="current-password" placeholder="••••••••" required></label>
+        <div class="row-between">
+          <label class="check"><input type="checkbox" name="showpass"> <span data-i18n="auth.showPassword">Показать пароль</span></label>
+          <button type="button" class="link" id="toRecover" data-i18n="auth.forgot">Забыли пароль?</button>
+        </div>
+        <button class="btn primary" type="submit" data-i18n="auth.login">Войти</button>
+        <div class="auth-note" id="deviceNotice"></div>
+      </form>
+
+      <!-- Регистрация -->
+      <form id="registerForm" class="auth-form hidden">
+        <label><span data-i18n="auth.username">Логин</span>
+          <input name="username" data-i18n-ph="auth.usernamePlaceholder" required minlength="3" maxlength="32"></label>
+        <label><span data-i18n="auth.displayName">Отображаемое имя</span>
+          <input name="display_name" data-i18n-ph="auth.displayNamePlaceholder" autocomplete="nickname"></label>
+        <label><span data-i18n="auth.password">Пароль</span>
+          <input name="password" type="password" autocomplete="new-password" required minlength="8" placeholder="••••••••"></label>
+        <label><span data-i18n="auth.password2">Повтор пароля</span>
+          <input name="password2" type="password" autocomplete="new-password" required minlength="8"></label>
+        <p class="muted small" data-i18n="auth.passwordNote"></p>
+        <label class="check"><input type="checkbox" name="terms" required> <span data-i18n="auth.terms"></span></label>
+        <button class="btn primary" type="submit" data-i18n="auth.register">Создать аккаунт</button>
+        <div class="auth-note" id="registerNotice"></div>
+      </form>
+
+      <!-- Восстановление -->
+      <form id="recoverForm" class="auth-form hidden">
+        <div class="tabs small" id="recoverTabs">
+          <button class="tab active" data-rtab="phrase" data-i18n="auth.recover.phraseTab">По фразе</button>
+          <button class="tab" data-rtab="device" data-i18n="auth.recover.deviceTab">С другого устройства</button>
+          <button class="tab" data-rtab="help" data-i18n="auth.recover.helpTab">Нет доступа</button>
+        </div>
+        <div id="recoverPhrase">
+          <label><span data-i18n="auth.username">Логин</span><input name="username" autocomplete="username" required></label>
+          <label><span data-i18n="auth.recoveryPhrase">Фраза восстановления</span>
+            <textarea name="phrase" rows="3" data-i18n-ph="auth.recoveryPhrasePlaceholder"></textarea></label>
+          <label><span data-i18n="auth.newPassword">Новый пароль</span>
+            <input name="password" type="password" autocomplete="new-password" minlength="8" required></label>
+          <button class="btn primary" type="submit" data-i18n="auth.restoreAccess">Восстановить доступ</button>
+          <p class="muted small" data-i18n="auth.phraseCheckedLocally"></p>
+        </div>
+        <div id="recoverDevice" class="hidden">
+          <p data-i18n="auth.pairHint"></p>
+          <button class="btn" type="button" id="pairStartBtn" data-i18n="auth.pairStart">Начать привязку устройства</button>
+          <div id="pairStatus" class="muted small"></div>
+          <div id="pairQr" class="qr-box"></div>
+        </div>
+        <div id="recoverHelp" class="hidden">
+          <p><b data-i18n="auth.help.title"></b></p>
+          <ul class="bullets">
+            <li data-i18n="auth.help.1"></li>
+            <li data-i18n="auth.help.2"></li>
+            <li data-i18n="auth.help.3"></li>
+          </ul>
+          <button class="btn" type="button" id="releaseDeviceBtn" data-i18n="auth.releaseDevice">Освободить устройство</button>
+        </div>
+      </form>
+
+      <div class="auth-footer">
+        <span id="serverBadge" class="badge">…</span>
+        <span class="lang-mini">
+          <select id="langSelectAuth" title="Язык / Language"></select>
+        </span>
+        <button class="link" id="demoBtn" type="button" data-i18n="auth.demo">Открыть демо-режим</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ ОСНОВНОЙ ИНТЕРФЕЙС ══ -->
+  <section id="mainScreen" class="main-screen hidden">
+    <aside class="sidebar" id="sidebar">
+      <header class="sidebar-head">
+        <button class="icon-btn" id="burgerBtn" data-i18n-title="settings.title">☰</button>
+        <label class="search">
+          <input id="chatSearch" data-i18n-ph="chat.searchPlaceholder" autocomplete="off">
+        </label>
+        <button class="icon-btn" id="newChatBtn" data-i18n-title="chat.newChat">✎</button>
+      </header>
+      <div class="filter-row" id="chatFilters">
+        <button class="chip active" data-filter="all" data-i18n="chat.filter.all">Все</button>
+        <button class="chip" data-filter="unread" data-i18n="chat.filter.unread">Непрочитанные</button>
+        <button class="chip" data-filter="groups" data-i18n="chat.filter.groups">Группы</button>
+        <button class="chip" data-filter="archived" data-i18n="chat.filter.archived">Архив</button>
+      </div>
+      <div class="ann-banner hidden" id="annBanner" role="status"></div>
+      <div class="chat-list" id="chatList"></div>
+      <footer class="sidebar-foot">
+        <button class="me-btn" id="meBtn">
+          <span class="avatar" id="meAvatar"></span>
+          <span class="me-info"><b id="meName">—</b><small id="meStatus"></small></span>
+          <span class="conn-dot" id="connDot"></span>
+        </button>
+      </footer>
+    </aside>
+
+    <main class="chat" id="chatArea">
+      <div class="empty-state" id="emptyState">
+        <svg viewBox="0 0 64 64" class="logo big"><path d="M32 4 8 14v18c0 14 10 24 24 28 14-4 24-14 24-28V14L32 4z" fill="none" stroke="#4f8cff" stroke-width="3"/><path d="M22 30h20v14H22z" fill="#4f8cff"/><path d="M26 30v-6a6 6 0 0 1 12 0v6" fill="none" stroke="#4f8cff" stroke-width="3"/></svg>
+        <h2 data-i18n="chat.empty.title">Выберите чат</h2>
+        <p class="muted" data-i18n="chat.empty.text"></p>
+        <div class="feature-grid" id="featureGrid"></div>
+      </div>
+
+      <div class="chat-view hidden" id="chatView">
+        <header class="chat-head">
+          <button class="icon-btn back" id="backBtn" data-i18n-title="chat.back">←</button>
+          <div class="peer" id="peerInfo">
+            <span class="avatar" id="peerAvatar"></span>
+            <span class="peer-text"><b id="peerName">—</b><small id="peerStatus"></small></span>
+          </div>
+          <div class="chat-actions">
+            <span class="e2e-badge" id="e2eBadge" data-i18n-title="settings.encryption">🔒 E2E ×2</span>
+            <button class="icon-btn" id="callAudioBtn" data-i18n-title="chat.callAudio">📞</button>
+            <button class="icon-btn" id="callVideoBtn" data-i18n-title="chat.callVideo">🎥</button>
+            <button class="icon-btn" id="searchInChatBtn" data-i18n-title="chat.searchInChat">🔍</button>
+            <button class="icon-btn" id="chatMenuBtn" data-i18n-title="chat.menu">⋮</button>
+          </div>
+        </header>
+
+        <div class="pinned-bar hidden" id="pinnedBar"></div>
+
+        <div class="messages" id="messages"></div>
+
+        <div class="composer">
+          <div class="reply-bar hidden" id="replyBar">
+            <span id="replyText"></span><button class="icon-btn" id="cancelReply" data-i18n-title="chat.cancelReply">✕</button>
+          </div>
+          <div class="composer-row">
+            <button class="icon-btn" id="attachBtn" data-i18n-title="chat.attach">📎</button>
+            <button class="icon-btn" id="emojiBtn" data-i18n-title="chat.emoji">😊</button>
+            <button class="icon-btn" id="ttlBtn" data-i18n-title="chat.ttl">⏱</button>
+            <textarea id="composerInput" data-i18n-ph="chat.composerPlaceholder" rows="1"></textarea>
+            <button class="icon-btn" id="micBtn" data-i18n-title="chat.voice">🎙</button>
+            <button class="btn send" id="sendBtn" data-i18n-title="chat.send">➤</button>
+          </div>
+          <div class="attach-preview hidden" id="attachPreview"></div>
+          <div class="emoji-picker hidden" id="emojiPicker"></div>
+        </div>
+      </div>
+    </main>
+
+    <aside class="right-panel hidden" id="rightPanel">
+      <header class="panel-head">
+        <button class="icon-btn" id="closePanel">✕</button><b id="panelTitle"></b>
+      </header>
+      <div class="panel-body" id="panelBody"></div>
+    </aside>
+  </section>
+
+  <!-- ══ ОВЕРЛЕИ ══ -->
+  <div class="modal-backdrop hidden" id="modalBackdrop"></div>
+  <div class="modal hidden" id="modal"><div class="modal-body" id="modalBody"></div></div>
+
+  <div class="call-overlay hidden" id="callOverlay">
+    <div class="call-box">
+      <div class="call-head">
+        <span class="call-avatar" id="callAvatar"></span>
+        <h3 id="callPeer">—</h3>
+        <p id="callState" class="muted"></p>
+      </div>
+      <video id="callRemote" autoplay playsinline class="call-remote"></video>
+      <video id="callLocal" autoplay playsinline muted class="call-local"></video>
+      <div class="call-controls">
+        <button class="ctrl" id="callMute">🎙</button>
+        <button class="ctrl" id="callVideoToggle">🎥</button>
+        <button class="ctrl" id="callScreen">🖥</button>
+        <button class="ctrl danger" id="callHangup">📴</button>
+      </div>
+      <div class="call-enc muted small" data-i18n="call.encrypted"></div>
+    </div>
+  </div>
+
+  <div class="toasts" id="toasts"></div>
+  <div class="file-drop" id="fileDrop"><span data-i18n="chat.attach"></span></div>
+</div>
+
+<script src="/js/i18n.js"></script>
+<script src="/js/crypto.js"></script>
+<script src="/js/store.js"></script>
+<script src="/js/demo-server.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/ui.js"></script>
+<script src="/js/call.js"></script>
+<script src="/js/admin.js"></script>
+<script src="/js/app.js"></script>
+</body>
+</html>

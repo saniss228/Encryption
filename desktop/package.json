@@ -1,0 +1,68 @@
+{
+  "name": "encryption-desktop",
+  "productName": "Encryption",
+  "version": "3.1.0",
+  "description": "Encryption — защищённый мессенджер с двойным шифрованием (AES-256-GCM + RSA-4096-OAEP)",
+  "author": "Encryption",
+  "license": "MIT",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build:win": "electron-builder --win portable --x64 -c.compression=store",
+    "build:win-zip": "electron-builder --win zip --x64 -c.compression=store",
+    "build:linux": "electron-builder --linux AppImage deb --x64 -c.compression=store",
+    "build:dir": "electron-builder --dir"
+  },
+  "devDependencies": {
+    "electron": "^31.7.7",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "ru.encryption.messenger",
+    "productName": "Encryption",
+    "directories": {
+      "output": "../release/desktop",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "package.json",
+      "build/icon.ico",
+      "build/icon.png"
+    ],
+    "extraResources": [
+      {
+        "from": "../web",
+        "to": "web",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "artifactName": "Encryption-${version}-win-x64-portable.${ext}"
+    },
+    "portable": {
+      "artifactName": "Encryption-${version}-win-x64-portable.exe",
+      "unpackDirName": false
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "icon": "build/icon.png",
+      "category": "Network;InstantMessaging",
+      "artifactName": "Encryption-${version}-linux-x64.${ext}"
+    }
+  }
+}

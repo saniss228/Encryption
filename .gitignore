@@ -1,0 +1,26 @@
+# ── Данные и секреты (никогда не в репозиторий) ──────────────────────────────
+data/
+*.db
+*.db-wal
+*.db-shm
+.*.key
+.env
+.venv/
+venv/
+
+# ── Сборка и кэш ────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+node_modules/
+android/build/
+dist/
+*.log
+
+# ── Тяжёлые бинарники: собираются командой tools/build_apk.sh и npm run build:* ──
+release/**/*.exe
+release/*.zip
+release/desktop/
+*.idsig
+
+# Сгенерированные копии веб-клиента (создаёт tools/build_apk.sh)
+android/assets/www/
