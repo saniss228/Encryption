@@ -13,6 +13,8 @@
 #           powershell -ExecutionPolicy Bypass -File tools\start-encryption.ps1 -Port 8080
 #
 #  Остановка: Ctrl+C в окне либо просто закрыть окно.
+#
+#  Совместимо с PowerShell 5.1 (Windows 10/11) и PowerShell 7+.
 # ============================================================================
 [CmdletBinding()]
 param(
@@ -28,6 +30,34 @@ function Say([string] $m) { Write-Host $m }
 function Ok([string] $m)  { Write-Host $m -ForegroundColor Green }
 function Warn([string] $m){ Write-Host $m -ForegroundColor Yellow }
 function Bad([string] $m) { Write-Host $m -ForegroundColor Red }
+
+# ── Запуск внешних программ ────────────────────────────────────────────────
+# В PowerShell 5.1 любая запись внешней программы в stderr превращается в
+# исключение (NativeCommandError), а кавычки внутри аргументов съедаются.
+# Поэтому: (1) никакого кода с кавычками в аргументах, (2) запускаем через
+# этот помощник, который глушит такое поведение и отдаёт код возврата.
+function Invoke-Native {
+    param(
+        [Parameter(Mandatory)][string]   $File,
+        [Parameter(Mandatory)][string[]] $Arguments
+    )
+    $saved = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    $out = $null
+    $code = -1
+    try {
+        $out  = & $File @Arguments 2>&1
+        $code = $LASTEXITCODE
+        if ($null -eq $code) { $code = 0 }
+    } catch {
+        $out  = @($_.Exception.Message)
+        $code = -1
+    } finally {
+        $ErrorActionPreference = $saved
+    }
+    $text = (($out | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] }) | ForEach-Object { "$_" }) -join "`n"
+    [pscustomobject]@{ Text = "$text".Trim(); Code = [int]$code; Lines = @($out) }
+}
 
 $Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)   # корень проекта
 Set-Location $Root
@@ -60,13 +90,16 @@ function Get-PyLauncher {
     foreach ($cand in @('py', 'python', 'python3')) {
         $cmd = Get-Command $cand -ErrorAction SilentlyContinue
         if (-not $cmd) { continue }
-        $extra = if ($cand -eq 'py') { @('-3') } else { @() }
-        try {
-            $exe = & $cand @extra '-c' 'import sys;print(sys.executable)' 2>$null
-            if ($LASTEXITCODE -eq 0 -and $exe -and (Test-Path $exe)) {
+        $extra = @()
+        if ($cand -eq 'py') { $extra = @('-3') }
+        $r = Invoke-Native $cand ($extra + @('-c', 'import sys;print(sys.executable)'))
+        if ($r.Code -eq 0) {
+            $exe = ($r.Text -split "`n" | Where-Object { $_ -match '\S' } | Select-Object -Last 1)
+            if ($exe) { $exe = $exe.Trim() }
+            if ($exe -and (Test-Path $exe)) {
                 return @{ Cmd = $cand; Args = $extra; Exe = $exe }
             }
-        } catch { }
+        }
     }
     return $null
 }
@@ -86,10 +119,14 @@ if (-not $py) {
     exit 3
 }
 
-$ver = & $py.Cmd @($py.Args) '-c' 'import sys;print("%d.%d"%sys.version_info[:2])' 2>$null
-$ok  = & $py.Cmd @($py.Args) '-c' 'import sys;print(1 if sys.version_info>=(3,10) else 0)' 2>$null
+# Версия: спрашиваем у самого Python («Python 3.12.4») — без хитрых кавычек
+$rVer  = Invoke-Native $py.Cmd ($py.Args + @('--version'))
+$major = 0; $minor = 0
+if ($rVer.Text -match '(\d+)\.(\d+)') { $major = [int]$Matches[1]; $minor = [int]$Matches[2] }
+$ver  = if ($major) { "$major.$minor" } else { 'неизвестно' }
+$okPy = ($major -gt 3) -or (($major -eq 3) -and ($minor -ge 10))
 Say "→ Python: $ver  ($($py.Exe))"
-if ($ok -ne '1') {
+if (-not $okPy) {
     Bad "✗ Нужен Python 3.10 или новее (найден $ver)."
     Say '  Скачайте новую версию: https://www.python.org/downloads/windows/'
     Read-Host 'Нажмите Enter, чтобы закрыть'
@@ -104,19 +141,26 @@ if ($Reinstall -and (Test-Path $Venv)) {
 
 if (-not (Test-Path $VenvPy)) {
     Say '→ Первый запуск: создаю окружение .venv (это одна минута)…'
-    & $py.Cmd @($py.Args) '-m' 'venv' $Venv
-    if (-not (Test-Path $VenvPy)) { Bad '✗ Не удалось создать .venv'; Read-Host 'Enter'; exit 4 }
+    $r = Invoke-Native $py.Cmd ($py.Args + @('-m', 'venv', $Venv))
+    if ((-not (Test-Path $VenvPy)) -or ($r.Code -ne 0)) {
+        Bad '✗ Не удалось создать .venv.'
+        if ($r.Text) { Say "  $($r.Text)" }
+        Read-Host 'Нажмите Enter, чтобы закрыть'
+        exit 4
+    }
 }
 
+$needDeps = @('-c', 'import fastapi,uvicorn,aiosqlite,argon2,cryptography')
 if (-not $NoInstall) {
-    $hasFastapi = & $VenvPy '-c' 'import fastapi,uvicorn,aiosqlite,argon2,cryptography;print("ok")' 2>$null
-    if ($hasFastapi -ne 'ok') {
+    $check = Invoke-Native $VenvPy $needDeps
+    if ($check.Code -ne 0) {
         Say '→ Устанавливаю зависимости сервера (один раз)…'
-        & $VenvPy '-m' 'pip' 'install' '--upgrade' 'pip' '--quiet' '--disable-pip-version-check'
-        & $VenvPy '-m' 'pip' 'install' '-r' $Req '--quiet' '--disable-pip-version-check'
-        $hasFastapi = & $VenvPy '-c' 'import fastapi;print("ok")' 2>$null
-        if ($hasFastapi -ne 'ok') {
+        $null = Invoke-Native $VenvPy @('-m', 'pip', 'install', '--upgrade', 'pip', '--quiet', '--disable-pip-version-check')
+        $r = Invoke-Native $VenvPy @('-m', 'pip', 'install', '-r', $Req, '--quiet', '--disable-pip-version-check')
+        $check = Invoke-Native $VenvPy $needDeps
+        if ($check.Code -ne 0) {
             Bad '✗ Не удалось установить зависимости. Проверьте интернет и запустите снова.'
+            if ($r.Text) { Say "  $($r.Text)" }
             Say '  Вручную: .venv\Scripts\python.exe -m pip install -r server\requirements.txt'
             Read-Host 'Нажмите Enter, чтобы закрыть'
             exit 4
@@ -170,7 +214,7 @@ try {
 } catch { }
 
 Say ''
-Ok  "✓ Сервер запускается:"
+Ok  '✓ Сервер запускается:'
 Say "    на этом компьютере:  http://127.0.0.1:$Port/"
 if ($lanIp) { Say "    с телефона (та же сеть Wi-Fi): http://${lanIp}:$Port/" }
 Say "    данные и файлы:      $DataDir"
@@ -193,7 +237,7 @@ $job = Start-Job -ScriptBlock {
 } -ArgumentList $VenvPy, $Root
 
 $ready = $false
-for ($i = 0; $i -lt 40; $i++) {
+for ($i = 0; $i -lt 60; $i++) {
     Start-Sleep -Milliseconds 500
     try {
         $r = Invoke-WebRequest "http://127.0.0.1:$Port/api/v1/health" -UseBasicParsing -TimeoutSec 2
