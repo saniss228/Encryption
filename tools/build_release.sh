@@ -89,9 +89,16 @@ Encryption ${VERSION} — что в архиве
   файлами, рассылка объявлений, журнал безопасности, настройки сервера.
   Переписку администратор прочитать не может — на сервере только шифротекст.
 
+ОТПРАВКА ПРОЕКТА НА GITHUB
+  release/ОТПРАВИТЬ-НА-GITHUB.zip   готовый комплект: скрипты + вся история + файлы версии
+     Windows      — двойной клик по ЗАПУСТИТЬ-WINDOWS.cmd (или PUBLISH-WINDOWS.cmd)
+     Linux/macOS  — bash publish-to-github.sh
+  Скрипт спрашивает токен GitHub (не сохраняет его) и отправляет ветку main и тег v3.1.0.
+
 ПРОВЕРКА
   bash tools/run_tests.sh                        крипто + API + «только локально» + админ-панель
   PUPPETEER_DIR=/tmp/ui bash tools/run_tests.sh  ещё и интерфейс в headless-браузере
+  python3 tools/tests/mock_github.py             заглушка GitHub API для проверки скриптов публикации
 EOF
 
 python3 tools/make_zip.py "$REL/encryption-${VERSION}-all.zip" "$STAGE"
