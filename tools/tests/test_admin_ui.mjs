@@ -2,7 +2,7 @@
  * UI-тест админ-панели Encryption (самодостаточный).
  *
  *  Поднимает отдельный сервер на свежей базе, затем:
- *    1) регистрирует аккаунт «saniss» через обычную форму → проверяет, что он
+ *    1) регистрирует аккаунт «saness» через обычную форму → проверяет, что он
  *       получает админ-права (значок рядом с логином, раздел в настройках);
  *    2) открывает админ-панель: обзор, пользователи, рассылка, настройки;
  *    3) проверяет локализации панели (ru / en / es / de);
@@ -33,7 +33,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 /* ── Поднимаем отдельный сервер на свежей базе ─────────────────────────────── */
 const DATA = mkdtempSync(join(tmpdir(), 'enc-admin-ui-'));
 const server = spawn('python3', ['-m', 'server.app'], {
-  cwd: ROOT, env: { ...process.env, ENC_PORT: PORT, ENC_DATA_DIR: DATA, ENC_ADMINS: 'saniss' },
+  cwd: ROOT, env: { ...process.env, ENC_PORT: PORT, ENC_DATA_DIR: DATA, ENC_ADMINS: 'saness' },
   stdio: ['ignore', 'pipe', 'pipe'],
 });
 server.stdout.on('data', (d) => process.env.ENC_VERBOSE && console.log('  [srv]', String(d).trim()));
@@ -78,12 +78,12 @@ const browser = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox',
 try {
   console.log(`→ Сервер: ${BASE}   (данные: ${DATA})\n`);
 
-  // ── 1. saniss регистрируется как обычный пользователь ────────────────────
-  const page = await registerViaUI(browser, 'saniss', 'Сергей');
-  check('аккаунт saniss зарегистрирован через сайт', true);
+  // ── 1. saness регистрируется как обычный пользователь ────────────────────
+  const page = await registerViaUI(browser, 'saness', 'Сергей');
+  check('аккаунт saness зарегистрирован через сайт', true);
 
   const role = await page.evaluate(() => ({ role: App.user.role, admin: App.user.is_admin }));
-  check('saniss автоматически получил роль admin', role.admin === true && role.role === 'admin', JSON.stringify(role));
+  check('saness автоматически получил роль admin', role.admin === true && role.role === 'admin', JSON.stringify(role));
 
   const badge = await page.$eval('#meStatus', (el) => el.textContent.trim());
   check('рядом с логином виден значок «Администратор»', /Администратор|🛡/.test(badge), badge);
@@ -125,7 +125,7 @@ try {
   await page.waitForSelector('#admReg', { timeout: 10000 });
   const envRows = await page.$$eval('#admBody .adm-kv', (els) => els.map((e) => e.textContent));
   check('видны параметры сервера и список администраторов',
-    envRows.some((r) => r.includes('saniss')) && envRows.some((r) => /\d+\.\d+\.\d+/.test(r)),
+    envRows.some((r) => r.includes('saness')) && envRows.some((r) => /\d+\.\d+\.\d+/.test(r)),
     envRows.length + ' строк');
 
   // ── 6. Журнал и файлы ────────────────────────────────────────────────────

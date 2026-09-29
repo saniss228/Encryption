@@ -20,7 +20,7 @@ Environment=ENC_PUBLIC_IP=45.90.45.92
 Environment=ENC_DATA_DIR=/opt/encryption/data
 Environment=ENC_WEB_DIR=/opt/encryption/web
 # Логины администраторов (через запятую). Панель: Настройки → Админ-панель
-Environment=ENC_ADMINS=saniss
+Environment=ENC_ADMINS=saness
 
 # Когда получите TLS-сертификат — раскомментируйте (uvicorn сам поднимет HTTPS):
 # Environment=ENC_TLS_CERT=/etc/letsencrypt/live/your-domain.ru/fullchain.pem

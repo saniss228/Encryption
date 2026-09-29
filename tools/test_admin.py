@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Приёмочный тест админ-панели (логин saniss).
+Приёмочный тест админ-панели (логин saness).
 
 Проверяет: выдача админ-прав, отказ обычному пользователю, обзор сервера,
 блокировку и разблокировку, принудительный выход, рассылку объявлений,
@@ -78,25 +78,25 @@ def register(username: str, device: str):
 
 
 def main() -> int:
-    print(f"→ Сервер: {BASE}   (админ по умолчанию: saniss)\n")
+    print(f"→ Сервер: {BASE}   (админ по умолчанию: saness)\n")
 
-    # ── Админ-аккаунт saniss ────────────────────────────────────────────────
-    st, res = register("saniss", "admin_dev_" + SUF + "_0001")
+    # ── Админ-аккаунт saness ────────────────────────────────────────────────
+    st, res = register("saness", "admin_dev_" + SUF + "_0001")
     if st == 409:
         # Аккаунт уже есть (повторный прогон) — входим тем же тестовым секретом
         st, res = call("POST", "/api/v1/auth/login", {
-            "username": "saniss", "auth_hash": "a" * 64,
+            "username": "saness", "auth_hash": "a" * 64,
             "device": {"device_id": "admin_dev_" + SUF + "_0001", "name": "тест", "platform": "web"}})
-        check("повторный вход saniss", st == 200, f"{st}")
+        check("повторный вход saness", st == 200, f"{st}")
         admin_token = res.get("tokens", {}).get("access_token") if st == 200 else None
         if admin_token:
             check("роль admin сохраняется при входе", res["user"].get("role") == "admin",
                   str(res["user"].get("role")))
     else:
-        check("регистрация saniss", st == 201, f"{st}")
+        check("регистрация saness", st == 201, f"{st}")
         admin_token = res.get("tokens", {}).get("access_token") if st == 201 else None
         if admin_token:
-            check("saniss получил роль admin", res["user"].get("role") == "admin",
+            check("saness получил роль admin", res["user"].get("role") == "admin",
                   str(res["user"].get("role")))
 
     # ── Обычный пользователь ────────────────────────────────────────────────
@@ -113,7 +113,7 @@ def main() -> int:
           st == 403 and code_of(r) == "ADMIN_ONLY", f"{st} {code_of(r)}")
 
     if not admin_token:
-        print("\n(нет токена saniss — остальные проверки пропущены)")
+        print("\n(нет токена saness — остальные проверки пропущены)")
         return 0 if not FAIL else 1
 
     # ── Обзор сервера ───────────────────────────────────────────────────────

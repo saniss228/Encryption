@@ -26,6 +26,7 @@ param(
     [int]    $Port     = 6000,              # основной порт: приложения и API
     [int]    $SitePort = 8080,              # порт для браузера (6000 браузеры блокируют)
     [string] $BindHost = '0.0.0.0',         # 0.0.0.0 — доступно и с телефона в этой же сети
+    [string] $LanIp    = '',                # адрес для телефона вручную, если автоопределение ошиблось
     [switch] $NoBrowser,                    # не открывать браузер
     [switch] $NoInstall,                    # не проверять/ставить зависимости
     [switch] $Reinstall                     # пересоздать окружение .venv
@@ -183,7 +184,7 @@ if ($SitePort -and $SitePort -ne $Port) { $env:ENC_ALT_PORTS = "$SitePort" } els
 $env:ENC_DATA_DIR    = $DataDir
 $env:ENC_WEB_DIR     = $WebDir
 $env:ENC_PUBLIC_IP   = '127.0.0.1'
-$env:ENC_ADMINS      = if ($env:ENC_ADMINS) { $env:ENC_ADMINS } else { 'saniss' }   # админ-панель
+$env:ENC_ADMINS      = if ($env:ENC_ADMINS) { $env:ENC_ADMINS } else { 'saness' }   # админ-панель
 if (-not (Test-Path $DataDir)) { New-Item -ItemType Directory -Path $DataDir | Out-Null }
 
 $hasSite = [bool]($SitePort -and $SitePort -ne $Port)
@@ -220,13 +221,57 @@ foreach ($p in $portsToCheck) {
 }
 
 # ── 6. Локальный и сетевой адреса ──────────────────────────────────────────
-$lanIp = $null
-try {
-    $lanIp = (Get-NetIPAddress -AddressFamily IPv4 -ErrorAction Stop |
-              Where-Object { $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.254.*' -and
-                             $_.PrefixOrigin -ne 'WellKnown' } |
-              Select-Object -First 1).IPAddress
-} catch { }
+# Адрес для телефона: только настоящий Wi-Fi/Ethernet, без VPN и «хот-спота»
+# Windows (192.168.137.1) — правила поиска и оценка адаптеров в tools/lan-ip.ps1,
+# их проверяет тест tools/tests/test_lan_ip.ps1. Свой адрес задаётся ключом
+# -LanIp 192.168.1.50, если автоопределение на этом компьютере ошибается.
+$lanModule = Join-Path $PSScriptRoot 'lan-ip.ps1'
+if (Test-Path $lanModule) {
+    . $lanModule
+} else {
+    Warn '⚠ Не найден tools\lan-ip.ps1 — определяю адрес упрощённо.'
+    Warn '  Обновите файлы запуска целиком: распакуйте архив заново или скачайте'
+    Warn '  tools\lan-ip.ps1 рядом с tools\start-encryption.ps1.'
+}
+if (-not (Get-Command Get-LanCandidates -ErrorAction SilentlyContinue)) {
+    function Get-LanCandidates {
+        $list = @()
+        try {
+            foreach ($addr in [System.Net.Dns]::GetHostAddresses([System.Net.Dns]::GetHostName())) {
+                if ($addr.AddressFamily -ne [System.Net.Sockets.AddressFamily]::InterNetwork) { continue }
+                $ip = $addr.IPAddressToString
+                if (-not $ip) { continue }
+                if ($ip -like '127.*' -or $ip -like '169.254.*') { continue }
+                $score = 30
+                if ($ip -like '192.168.137.*') { $score += 50 }
+                $list += [pscustomobject]@{ Ip = $ip; Label = 'системный адрес'; Score = $score }
+            }
+        } catch { }
+        return @($list)
+    }
+}
+if (-not (Get-Command Get-BestLan -ErrorAction SilentlyContinue)) {
+    function Get-BestLan {
+        param([AllowEmptyCollection()][array] $Candidates = @())
+        $r = [pscustomobject]@{ Ip = $null; Label = ''; Others = @() }
+        if (-not $Candidates -or $Candidates.Count -eq 0) { return $r }
+        $s = @($Candidates | Sort-Object -Property Score, Ip)
+        $r.Ip = [string]$s[0].Ip
+        $r.Label = [string]$s[0].Label
+        if ($s.Count -gt 1) { $r.Others = @($s[1..($s.Count - 1)]) }
+        return $r
+    }
+}
+
+if ($LanIp) {
+    $lan = [pscustomobject]@{ Ip = $LanIp; Label = 'указан вручную (-LanIp)'; Others = @() }
+} else {
+    $lanCandidates = @(Get-LanCandidates)
+    $lan = Get-BestLan -Candidates $lanCandidates
+}
+$lanIp     = $lan.Ip
+$lanLabel  = $lan.Label
+$lanOthers = @($lan.Others)
 
 Say ''
 Ok  '✓ Сервер запускается.'
@@ -236,11 +281,21 @@ if ($hasSite) { Say "    порт приложений и API:     $Port" }
 if ($lanIp) { Say "    адрес для приложения:      http://${lanIp}:$Port" }
 Say "    данные и файлы:            $DataDir"
 Say "    администратор:             $env:ENC_ADMINS  (раздел «Админ-панель» в настройках)"
+if ($lanIp -and $lanLabel) { Say "    сетевой адаптер:           $lanLabel" }
+if ($lanOthers.Count -gt 0) {
+    Say '    другие адреса этого компьютера — если телефон не подключается,'
+    Say '    попробуйте один из них (VPN и хот-спот для телефона не подходят):'
+    foreach ($o in $lanOthers) { Say "        $($o.Ip)  — $($o.Label)" }
+}
 Say ''
 Say '  Остановка сервера — Ctrl+C в этом окне.'
 if ($lanIp) {
     Say '  Windows может спросить про доступ в сеть — разрешите для частных сетей,'
     Say '  иначе телефон не подключится.'
+}
+if ($lanOthers.Count -gt 0) {
+    Say '  Свой адрес можно указать вручную:'
+    Say '      START-ENCRYPTION-WINDOWS.cmd 6000 8080 192.168.1.50'
 }
 Say '══════════════════════════════════════════════════════════════════════'
 Say ''

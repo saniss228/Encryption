@@ -105,11 +105,31 @@ if [ -n "$BUSY" ]; then
 fi
 
 # ── Адреса ─────────────────────────────────────────────────────────────────
-LAN_IP=""
-if command -v hostname >/dev/null 2>&1; then
-  LAN_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
+# Адрес для телефона берём с настоящего сетевого адаптера, а не с виртуального
+# (VPN, docker) и не с хот-спота Windows — иначе телефон не подключится.
+LAN_IP="${ENC_LAN_IP:-}"
+if [ -z "$LAN_IP" ]; then
+  # 1) адрес интерфейса, через который идёт трафик по умолчанию
+  if command -v ip >/dev/null 2>&1; then
+    LAN_IP="$(ip route get 1.1.1.1 2>/dev/null | sed -n 's/.* src \([0-9.]*\).*/\1/p' | head -1)"
+  fi
+  # 2) если не вышло — первый обычный адрес из hostname -I
+  if [ -z "$LAN_IP" ] && command -v hostname >/dev/null 2>&1; then
+    LAN_IP="$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -vE '^(127\.|169\.254\.|$)' | head -1)"
+  fi
+  # 3) macOS
+  if [ -z "$LAN_IP" ]; then
+    LAN_IP="$(ipconfig getifaddr en0 2>/dev/null || true)"
+  fi
 fi
-[ -n "$LAN_IP" ] || LAN_IP="$(ipconfig getifaddr en0 2>/dev/null || true)"
+LAN_OTHERS=""
+if command -v hostname >/dev/null 2>&1; then
+  for _ip in $(hostname -I 2>/dev/null); do
+    case "$_ip" in 127.*|169.254.*) continue ;; esac
+    [ "$_ip" = "$LAN_IP" ] && continue
+    LAN_OTHERS="$LAN_OTHERS $_ip"
+  done
+fi
 
 say ""
 ok "✓ Сервер запускается."
@@ -118,7 +138,8 @@ say "    сайт на этом компьютере:   http://127.0.0.1:$SITEPO
 say "    порт приложений и API:     $PORT"
 [ -n "$LAN_IP" ] && say "    адрес для приложения:      http://$LAN_IP:$PORT"
 say "    данные и файлы:            $ROOT/data"
-say "    администратор:             ${ENC_ADMINS:-saniss}  (раздел «Админ-панель» в настройках)"
+say "    администратор:             ${ENC_ADMINS:-saness}  (раздел «Админ-панель» в настройках)"
+[ -n "$LAN_OTHERS" ] && say "    другие адреса этого компьютера:$LAN_OTHERS"
 say ""
 say "  Остановка сервера — Ctrl+C."
 say "══════════════════════════════════════════════════════════════════════"
@@ -131,7 +152,7 @@ else
   export ENC_ALT_PORTS=""
 fi
 export ENC_PUBLIC_IP="${ENC_PUBLIC_IP:-127.0.0.1}"
-export ENC_ADMINS="${ENC_ADMINS:-saniss}"
+export ENC_ADMINS="${ENC_ADMINS:-saness}"
 
 "$PY" -m server.app &
 SRV=$!

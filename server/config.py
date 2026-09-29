@@ -97,12 +97,12 @@ MAX_MESSAGE_BYTES = int(os.getenv("ENC_MAX_MESSAGE_BYTES", str(64 * 1024)))
 GROUP_MAX_MEMBERS = int(os.getenv("ENC_GROUP_MAX", "200"))
 RECOVERY_WORDS = int(os.getenv("ENC_RECOVERY_WORDS", "24"))   # BIP39-фраза
 
-VERSION = "3.2.2"      # надёжный запуск на Windows (без заданий PowerShell)
+VERSION = "3.2.3"      # надёжный запуск на Windows (без заданий PowerShell)
 
 # ── Администрирование ───────────────────────────────────────────────────────
 # Логины, получающие админ-права (панель управления сервером).
-# Задаётся через ENC_ADMINS, по умолчанию — saniss.
+# Задаётся через ENC_ADMINS, по умолчанию — saness.
 ADMIN_USERNAMES = {
-    u.strip().lower() for u in os.getenv("ENC_ADMINS", "saniss").split(",") if u.strip()
+    u.strip().lower() for u in os.getenv("ENC_ADMINS", "saness").split(",") if u.strip()
 }
 APP_NAME = "Encryption"

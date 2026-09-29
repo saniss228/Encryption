@@ -6,7 +6,7 @@
 #    3) файлы: удаление с сервера после скачивания получателем
 #    4) резервная копия и перенос данных на другой сервер
 #    5) UI в headless-браузере (два независимых профиля = два устройства)
-#    6) админ-панель: API (права saniss, блокировка, копия данных, рассылка)
+#    6) админ-панель: API (права saness, блокировка, копия данных, рассылка)
 #    7) админ-панель: интерфейс в браузере (свой сервер, все локализации)
 #
 #  Запуск:  bash tools/run_tests.sh
@@ -48,8 +48,34 @@ for name in ("START-ENCRYPTION-WINDOWS.cmd", "ЗАПУСТИТЬ-МЕССЕНД�
     else:
         print(f"  ✗ {name}: нет CRLF")
         ok = False
+
+# Логин администратора по умолчанию должен совпадать во всех точках входа:
+# сервер, лаунчер Windows, лаунчер Linux и служба systemd.
+expected = 'saness'
+places = {
+    "server/config.py": 'os.getenv("ENC_ADMINS", "saness")',
+    "tools/start-encryption.ps1": "'saness'",
+    "tools/start-server.sh": "${ENC_ADMINS:-saness}",
+    "deploy/encryption.service": "ENC_ADMINS=saness",
+}
+for name, needle in places.items():
+    text = (root / name).read_text(encoding="utf-8", errors="replace")
+    if needle in text:
+        print(f"  ✓ {name}: администратор по умолчанию — {expected}")
+    else:
+        print(f"  ✗ {name}: не найден администратор по умолчанию {expected} ({needle})")
+        ok = False
 sys.exit(0 if ok else 1)
 PYEOF
+# Логика выбора адреса для телефона (tools/lan-ip.ps1) — правила проверяются на
+# наборе адаптеров как на Windows: Wi-Fi должен побеждать Radmin VPN и хот-спот.
+PS_EXE=""
+for c in pwsh powershell; do command -v "$c" >/dev/null 2>&1 && PS_EXE="$c" && break; done
+if [ -n "$PS_EXE" ]; then
+  if "$PS_EXE" -NoProfile -File "$ROOT/tools/tests/test_lan_ip.ps1"; then :; else CORE_OK=0; fi
+else
+  echo "  пропущено: проверка адреса для телефона (нет pwsh/powershell)"
+fi
 if [ "$CORE_OK" = "1" ]; then PASS=$((PASS+1)); else FAIL=$((FAIL+1)); fi
 
 echo
@@ -102,7 +128,7 @@ else
 fi
 
 echo
-echo "══════ 6/7 Админ-панель: API (логин saniss) ══════"
+echo "══════ 6/7 Админ-панель: API (логин saness) ══════"
 if python3 "$ROOT/tools/test_admin.py" "$ENC_BASE"; then PASS=$((PASS+1)); else FAIL=$((FAIL+1)); fi
 
 echo

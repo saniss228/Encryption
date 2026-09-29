@@ -150,7 +150,7 @@ async def current_session(
 
 # ── Администрирование ──────────────────────────────────────────────────────
 def is_admin(user: dict[str, Any] | None) -> bool:
-    """Админ — либо роль в БД, либо логин из списка ENC_ADMINS (например, saniss)."""
+    """Админ — либо роль в БД, либо логин из списка ENC_ADMINS (например, saness)."""
     if not user:
         return False
     role = str(user.get("role") or "user")

@@ -217,7 +217,7 @@ async def register(body: RegisterRequest, request: Request):
          hash_secret(body.recovery["phrase_hash"]) if body.recovery and body.recovery.get("phrase_hash") else None,
          body.recovery_hint, db.now(), db.now()))
 
-    # Логины из ENC_ADMINS (по умолчанию — saniss) сразу получают админ-права
+    # Логины из ENC_ADMINS (по умолчанию — saness) сразу получают админ-права
     if is_root:
         await db.execute("UPDATE users SET role='admin' WHERE id=?", (uid,))
 
