@@ -27,6 +27,26 @@ def _pub(r: Any) -> dict:
     }
 
 
+
+async def _relation(uid: int, pid: int) -> dict[str, Any]:
+    """Как этот человек связан с текущим пользователем: друг / заявка / блокировка."""
+    from .friends import are_friends
+    rows = await db.fetchall(
+        "SELECT owner_id, blocked FROM contacts WHERE (owner_id=? AND peer_id=?) OR (owner_id=? AND peer_id=?)",
+        (uid, pid, pid, uid))
+    blocked = any(int(r["blocked"]) for r in rows)
+    friend = (not blocked) and await are_friends(uid, pid)
+    inc = await db.fetchone(
+        "SELECT id FROM friend_requests WHERE from_id=? AND to_id=? AND status='pending'", (pid, uid))
+    out = await db.fetchone(
+        "SELECT id FROM friend_requests WHERE from_id=? AND to_id=? AND status='pending'", (uid, pid))
+    state = "blocked" if blocked else ("friend" if friend else
+                                       ("incoming" if inc else ("outgoing" if out else "none")))
+    return {"relation": state, "friend": friend, "blocked": blocked,
+            "incoming_request_id": inc["id"] if inc else None,
+            "outgoing_request_id": out["id"] if out else None}
+
+
 # ── Профиль ────────────────────────────────────────────────────────────────
 @router.get("/users/me")
 async def me(sess: dict = Depends(current_session)):
@@ -123,7 +143,12 @@ async def search_users(q: str = Query(min_length=1, max_length=64), limit: int =
         """SELECT * FROM users WHERE (username LIKE ? OR display_name LIKE ?) AND id<>? AND is_banned=0
             ORDER BY (username=?) DESC, last_seen DESC LIMIT ?""",
         (f"%{q}%", f"%{q}%", uid, q, min(limit, 50)))
-    return {"users": [_pub(r) for r in rows]}
+    out = []
+    for r in rows:
+        item = _pub(r)
+        item.update(await _relation(uid, int(r["id"])))
+        out.append(item)
+    return {"users": out}
 
 
 @router.get("/users/by-id/{user_id}")
@@ -139,9 +164,11 @@ async def user_profile(username: str, sess: dict = Depends(current_session)):
     row = await db.fetchone("SELECT * FROM users WHERE username=?", (username,))
     if not row:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Пользователь не найден")
-    contact = await db.fetchone("SELECT * FROM contacts WHERE owner_id=? AND peer_id=?",
-                                (int(sess["user"]["id"]), int(row["id"])))
-    return {"user": _pub(row), "contact": dict(contact) if contact else None}
+    uid = int(sess["user"]["id"])
+    contact = await db.fetchone("SELECT * FROM contacts WHERE owner_id=? AND peer_id=?", (uid, int(row["id"])))
+    profile = _pub(row)
+    profile.update(await _relation(uid, int(row["id"])))
+    return {"user": profile, "contact": dict(contact) if contact else None}
 
 
 @router.get("/users/{username}/bundle")
@@ -212,6 +239,12 @@ async def delete_contact(user_id: int, sess: dict = Depends(current_session)):
 async def create_call(body: CallCreateRequest, sess: dict = Depends(current_session)):
     uid = int(sess["user"]["id"])
     await member(body.chat_id, uid)
+    from .friends import blocked_between
+    peers = await db.fetchall("SELECT user_id FROM chat_members WHERE chat_id=?", (body.chat_id,))
+    for pr in peers:
+        if int(pr["user_id"]) != uid and await blocked_between(uid, int(pr["user_id"])):
+            raise HTTPException(status.HTTP_403_FORBIDDEN,
+                                detail={"code": "BLOCKED", "message": "Звонок недоступен: пользователь заблокирован"})
     cid = "c" + secrets.token_hex(10)
     await db.execute(
         "INSERT INTO calls(id,chat_id,caller_id,kind,state,started_at,participants) VALUES(?,?,?,?,?,?,?)",

@@ -103,6 +103,15 @@ def main() -> int:
     if not cid:
         return 1
 
+    # С версии 3.4.0 писать можно только друзьям: заявка и принятие
+    st, req = call("POST", "/api/v1/friends/requests", {"username": "lo_b_" + SUF}, token=ta)
+    check("A отправил заявку в друзья", st == 201, f"{st}")
+    st, lst = call("GET", "/api/v1/friends", token=tb)
+    rid = (lst.get("incoming") or [{}])[0].get("id") if st == 200 else None
+    if rid:
+        st, _ = call("POST", f"/api/v1/friends/requests/{rid}/accept", {}, token=tb)
+    check("B принял заявку", st == 200, f"{st}")
+
     # ── Загрузка файла (2 чанка по 64 КиБ) ──────────────────────────────────
     payload = secrets.token_bytes(64 * 1024) * 2
     st, init = call("POST", "/api/v1/files/init", {

@@ -30,6 +30,7 @@ from .routes.admin import router as admin_router
 from .routes.auth import router as auth_router
 from .routes.chats import router as chats_router
 from .routes.files import router as files_router
+from .routes.friends import router as friends_router
 from .routes.messages import router as messages_router
 from .routes.users import router as users_router
 
@@ -145,6 +146,7 @@ app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(chats_router)
 app.include_router(messages_router)
+app.include_router(friends_router)
 app.include_router(files_router)
 app.include_router(admin_router)
 app.include_router(announcements_router)

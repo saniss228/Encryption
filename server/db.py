@@ -185,6 +185,19 @@ CREATE TABLE IF NOT EXISTS files (
 CREATE INDEX IF NOT EXISTS idx_files_expire ON files(expires_at);
 
 -- ── Контакты / блокировки ──────────────────────────────────────────────────
+-- ── Заявки в друзья (написать можно только после принятой заявки) ──────────
+CREATE TABLE IF NOT EXISTS friend_requests (
+    id          TEXT PRIMARY KEY,
+    from_id     INTEGER NOT NULL,
+    to_id       INTEGER NOT NULL,
+    message     TEXT NOT NULL DEFAULT '',
+    status      TEXT NOT NULL DEFAULT 'pending',
+    created_at  INTEGER NOT NULL,
+    answered_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_freq_to ON friend_requests(to_id, status);
+CREATE INDEX IF NOT EXISTS idx_freq_from ON friend_requests(from_id, status);
+
 CREATE TABLE IF NOT EXISTS contacts (
     owner_id        INTEGER NOT NULL,
     peer_id         INTEGER NOT NULL,
@@ -288,6 +301,9 @@ MIGRATIONS: list[tuple[str, str, str]] = [
     ("users", "blocked_reason", "TEXT"),
     ("users", "blocked_at", "INTEGER"),
     ("users", "blocked_by", "INTEGER"),
+    # Контакты: блокировка собеседника (v3.4.0). Таблица есть и в старых базах —
+    # колонка добавляется миграцией, данные не теряются.
+    ("contacts", "blocked", "INTEGER NOT NULL DEFAULT 0"),
 ]
 
 

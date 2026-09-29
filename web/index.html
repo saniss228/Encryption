@@ -144,6 +144,7 @@
         <label class="search">
           <input id="chatSearch" data-i18n-ph="chat.searchPlaceholder" autocomplete="off">
         </label>
+        <button class="icon-btn badge-dot" id="friendsBtn" data-i18n-title="friends.title">👥<b class="dot hidden" id="friendsBadge">0</b></button>
         <button class="icon-btn" id="newChatBtn" data-i18n-title="chat.newChat">✎</button>
       </header>
       <div class="filter-row" id="chatFilters">
@@ -192,6 +193,10 @@
         <div class="messages" id="messages"></div>
 
         <div class="composer">
+          <div class="friend-gate hidden" id="friendGate">
+            <div class="fg-text"><b id="fgTitle"></b><small id="fgNote"></small></div>
+            <div class="fg-actions" id="fgActions"></div>
+          </div>
           <div class="reply-bar hidden" id="replyBar">
             <span id="replyText"></span><button class="icon-btn" id="cancelReply" data-i18n-title="chat.cancelReply">✕</button>
           </div>
@@ -223,6 +228,7 @@
 
   <div class="call-overlay hidden" id="callOverlay">
     <div class="call-box">
+      <button class="x-btn call-x" id="callClose" data-i18n-title="call.closeTitle">✕</button>
       <div class="call-head">
         <span class="call-avatar" id="callAvatar"></span>
         <h3 id="callPeer">—</h3>
@@ -230,7 +236,14 @@
       </div>
       <video id="callRemote" autoplay playsinline class="call-remote"></video>
       <video id="callLocal" autoplay playsinline muted class="call-local"></video>
-      <div class="call-controls">
+
+      <!-- Входящий звонок: принять или отклонить -->
+      <div class="call-incoming hidden" id="callIncomingActions">
+        <button class="ctrl accept" id="callAccept"><span>📞</span><small data-i18n="call.accept"></small></button>
+        <button class="ctrl danger decline" id="callDecline"><span>📴</span><small data-i18n="call.decline"></small></button>
+      </div>
+
+      <div class="call-controls hidden" id="callControls">
         <button class="ctrl" id="callMute">🎙</button>
         <button class="ctrl" id="callVideoToggle">🎥</button>
         <button class="ctrl" id="callScreen">🖥</button>
@@ -250,6 +263,8 @@
 <script src="js/demo-server.js"></script>
 <script src="js/api.js"></script>
 <script src="js/ui.js"></script>
+<script src="js/media.js"></script>
+<script src="js/friends.js"></script>
 <script src="js/call.js"></script>
 <script src="js/admin.js"></script>
 <script src="js/app.js"></script>

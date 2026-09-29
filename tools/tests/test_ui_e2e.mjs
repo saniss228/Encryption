@@ -12,6 +12,8 @@ async function newUser(name, display) {
   await page.setViewport({ width: 1400, height: 880 });
   page.on('pageerror', e => errs.push(name + ' pageerror: ' + e.message));
   page.on('console', m => console.log('  [' + name + ']', m.type(), m.text().slice(0, 160)));
+  // Любой ответ с ошибкой — с адресом запроса, чтобы не искать «404» вслепую
+  page.on('response', (r) => { if (r.status() >= 400) console.log('  [' + name + '] HTTP ' + r.status() + ' ' + r.url()); });
   await page.goto(BASE, { waitUntil: 'domcontentloaded' });
   await page.click('[data-tab=register]');
   await page.type('#registerForm [name=username]', name);
@@ -32,15 +34,57 @@ const a = await newUser(A, 'Анна');
 const b = await newUser(B, 'Борис');
 console.log('   фраза А (24 слова):', a.phrase.split(' ').slice(0,5).join(' ') + ' …', '| слов:', a.phrase.split(' ').length);
 
-console.log('2. Анна ищет Бориса и создаёт чат…');
+console.log('2. Анна ищет Бориса: просто «написать» незнакомцу нельзя — только заявка…');
 await a.page.click('#newChatBtn');
 await a.page.waitForSelector('#ncSearch');
 await a.page.type('#ncSearch', B.slice(0, 6));
 await a.page.waitForFunction(() => document.querySelectorAll('#ncResults [data-u]').length > 0, { timeout: 15000 });
-await a.page.click('#ncResults [data-u]');
-await a.page.waitForSelector('#chatView:not(.hidden)', { timeout: 20000 });
+const searchBtn = await a.page.$eval('#ncResults [data-fa]', (el) => ({ act: el.dataset.fa, text: el.textContent.trim() }));
+console.log('   кнопка в поиске:', JSON.stringify(searchBtn));
+await a.page.click('#ncResults [data-fa="add"]');
+await new Promise(r => setTimeout(r, 1200));
+console.log('   заявка отправлена');
+await a.page.evaluate(() => UI.closeModal());      // окно «Новый чат» закрываем — оно было открыто
 
-console.log('3. Анна отправляет сообщение…');
+console.log('2b. У Бориса появилась заявка (счётчик и окно «Друзья»)…');
+await b.page.waitForFunction(() => {
+  const el = document.getElementById('friendsBadge');
+  return el && !el.classList.contains('hidden');
+}, { timeout: 20000 }).then(() => console.log('   счётчик заявок появился')).catch(() => console.log('   ✗ счётчик не появился'));
+await b.page.click('#friendsBtn');
+await b.page.waitForSelector('#frTabs', { timeout: 10000 });
+await b.page.evaluate(() => document.querySelector('[data-fr=requests]').click());
+await new Promise(r => setTimeout(r, 500));
+await b.page.click('#frBody [data-act=accept]');
+await new Promise(r => setTimeout(r, 1500));
+const accepted = await b.page.evaluate(() => {
+  const btn = document.getElementById('friendsBtn');
+  return { badge: !document.getElementById('friendsBadge').classList.contains('hidden') };
+});
+console.log('   Борис принял заявку, счётчик пуст:', !accepted.badge);
+await b.page.evaluate(() => document.getElementById('modalClose').click());
+
+console.log('2c. Крестик и Esc закрывают окна…');
+const closeCheck = await b.page.evaluate(async () => {
+  const out = {};
+  document.getElementById('newChatBtn').click();
+  out.modalOpened = !document.getElementById('modal').classList.contains('hidden');
+  out.hasClose = !!document.getElementById('modalClose');
+  document.getElementById('modalClose').click();
+  out.closedByX = document.getElementById('modal').classList.contains('hidden');
+  document.getElementById('newChatBtn').click();
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+  out.closedByEsc = document.getElementById('modal').classList.contains('hidden');
+  return out;
+});
+console.log('   окно открылось:', closeCheck.modalOpened, '| крестик есть:', closeCheck.hasClose,
+  '| закрыто крестиком:', closeCheck.closedByX, '| закрыто Esc:', closeCheck.closedByEsc);
+
+console.log('3. Анна открывает чат с другом и отправляет сообщение…');
+await a.page.evaluate(async (uname) => { await App.openChat((await App.api.post('/api/v1/chats', { type:'direct', peer_username: uname })).id); }, B);
+await a.page.waitForSelector('#chatView:not(.hidden)', { timeout: 20000 });
+const gateGone = await a.page.evaluate(() => document.getElementById('friendGate').classList.contains('hidden'));
+console.log('   поле ввода доступно (подсказки о дружбе нет):', gateGone);
 await a.page.click('#composerInput');
 await a.page.type('#composerInput', 'Привет, Борис! Это сообщение зашифровано дважды 🔐');
 await a.page.click('#sendBtn');
@@ -116,6 +160,114 @@ const aBadge = await a.page.waitForFunction(
   { timeout: 15000 }).then(() => true).catch(() => false);
 const aBadgeText = await a.page.$$eval('.local-badge', (els) => els.map((e) => e.textContent.trim()));
 console.log('   Анна видит «только локально»:', aBadge, aBadgeText.length ? aBadgeText : '');
+
+console.log('7c. Картинка видна в переписке сразу (без нажатий)…');
+const imgCheck = await a.page.evaluate(async () => {
+  const canvas = document.createElement('canvas'); canvas.width = 240; canvas.height = 160;
+  const g = canvas.getContext('2d');
+  g.fillStyle = '#4f8cff'; g.fillRect(0, 0, 240, 160);
+  g.fillStyle = '#fff'; g.font = 'bold 26px sans-serif'; g.fillText('Encryption', 24, 90);
+  const blob = await new Promise((res) => canvas.toBlob(res, 'image/png'));
+  const file = new File([blob], 'картинка.png', { type: 'image/png' });
+  App.attachQueue.push({ file, kind: 'image' });
+  await App.sendMessage('Смотри, какая картинка', {});
+  return true;
+});
+await new Promise(r => setTimeout(r, 3500));
+const imgVisible = await b.page.waitForFunction(() => {
+  const img = document.querySelector('.att-img');
+  return img && img.src && img.src.startsWith('blob:') && img.naturalWidth > 0;
+}, { timeout: 25000 }).then(() => true).catch(() => false);
+const imgBox = await b.page.evaluate(() => {
+  const img = document.querySelector('.att-img');
+  return img ? { w: img.naturalWidth, h: img.naturalHeight, shown: img.getBoundingClientRect().height > 20 } : null;
+});
+console.log('   картинка отрисована в переписке:', imgVisible, JSON.stringify(imgBox), '| отправлено:', imgCheck);
+
+console.log('7d. Голосовое сообщение: плеер играет и переживает перерисовку списка…');
+await a.page.evaluate(async () => {
+  // Пишем реальный звук: сигнал идёт в тот же поток, из которого пишем
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const dest = ctx.createMediaStreamDestination();
+  const rec = new MediaRecorder(dest.stream);
+  const chunks = [];
+  rec.ondataavailable = (e) => chunks.push(e.data);
+  const done = new Promise((res) => { rec.onstop = res; });
+  rec.start();
+  const buf = ctx.createBuffer(1, 8000, 8000);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < data.length; i++) data[i] = Math.sin(i / 20) * 0.2;
+  const src = ctx.createBufferSource(); src.buffer = buf; src.connect(dest); src.start();
+  setTimeout(() => { try { rec.stop(); } catch (e) {} }, 2600);
+  await done;
+  const file = new File(chunks, 'voice.webm', { type: 'audio/webm' });
+  App.attachQueue.push({ file, kind: 'voice' });
+  await App.sendMessage('', {});
+});
+await new Promise(r => setTimeout(r, 3500));
+const voiceUI = await b.page.waitForFunction(() => !!document.querySelector('.voice-play'), { timeout: 25000 })
+  .then(() => true).catch(() => false);
+const voicePlay = await b.page.evaluate(async () => {
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const cur = () => { const m = [...document.querySelectorAll('.msg')].find((x) => x._voiceAudio); return m && m._voiceAudio; };
+  const btn = document.querySelector('.voice-play');
+  if (!btn) return { error: 'кнопки нет' };
+  btn.click();
+  let играет = false;
+  for (let i = 0; i < 50; i++) { const au = cur(); if (au && !au.paused && au.duration > 0) { играет = true; break; } await wait(100); }
+  const au = cur();
+  const out = {
+    играет,
+    ссылка: au ? String(au.src || '').slice(0, 5) : '',
+    длительность: au ? +(au.duration || 0).toFixed(1) : 0,
+    пауза: au ? au.paused : null,
+    иконка: btn.textContent.trim(),
+    время: document.querySelector('.voice-time').textContent,
+  };
+  // Перерисовка списка (квитанции, реакции) не должна «убивать» плеер
+  const было = cur();
+  App.renderMessages(App.activeChatId);
+  await wait(500);
+  const стало = cur();
+  out.после_перерисовки = {
+    тот_же_элемент: было === стало,
+    ссылка: стало ? String(стало.src || '').slice(0, 5) : '',
+    пауза: стало ? стало.paused : null,
+    позиция: стало ? +стало.currentTime.toFixed(1) : 0,
+    иконка: document.querySelector('.voice-play').textContent.trim(),
+  };
+  return out;
+});
+console.log('   плеер голосового есть:', voiceUI, '| играет:', JSON.stringify(voicePlay));
+const voiceOk = voiceUI && voicePlay.играет === true && voicePlay.ссылка === 'blob:'
+  && voicePlay.после_перерисовки && voicePlay.после_перерисовки.ссылка === 'blob:'
+  && voicePlay.после_перерисовки.пауза === false;
+console.log('   ' + (voiceOk ? '✓' : '✗') + ' голосовое воспроизводится и не обрывается при перерисовке');
+
+console.log('7e. Окно звонка: крестик и кнопка «Принять» для входящего…');
+const callUI = await a.page.evaluate(async () => {
+  const out = {};
+  // Настоящий звонок в API: тогда «Отклонить» отвечает серверу без ошибок 404
+  let callId = 'test-call';
+  try {
+    const real = await App.api.post('/api/v1/calls', { chat_id: App.activeChatId, kind: 'audio' });
+    callId = real.id || real.call_id || callId;
+  } catch (e) { /* демо-режим */ }
+  out.callId = callId;
+  Call.incoming({ chat_id: App.chatsById[App.activeChatId] ? App.activeChatId : 'x', call_id: callId,
+    from: App.user.id, kind: 'audio' });
+  await new Promise((r) => setTimeout(r, 300));
+  out.overlay = !document.getElementById('callOverlay').classList.contains('hidden');
+  out.acceptVisible = !document.getElementById('callIncomingActions').classList.contains('hidden');
+  out.acceptText = document.getElementById('callAccept').textContent.trim();
+  out.declineText = document.getElementById('callDecline').textContent.trim();
+  out.hasX = !!document.getElementById('callClose');
+  document.getElementById('callDecline').click();
+  await new Promise((r) => setTimeout(r, 300));
+  out.closed = document.getElementById('callOverlay').classList.contains('hidden');
+  return out;
+});
+console.log('   окно звонка:', JSON.stringify(callUI));
 
 console.log('8. Локализации: переключаем интерфейс на английский…');
 await a.page.evaluate(() => document.getElementById('meBtn').click());

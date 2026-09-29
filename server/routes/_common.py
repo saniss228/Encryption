@@ -142,5 +142,28 @@ async def fanout(chat_id: str, event: dict[str, Any], *, exclude_user: int | Non
     await hub.send_to_users(set(ids), event)
 
 
+async def ensure_can_write(chat: dict, user_id: int) -> None:
+    """Писать в личный чат можно только после принятой заявки в друзья.
+
+    Блокировка запрещает переписку и до принятия заявки, и после неё — проверяем
+    обе стороны, потому что блокировка бывает односторонней.
+    """
+    if chat.get("type") != "direct":
+        return
+    from .friends import are_friends, blocked_between
+    limit = await db.fetchone("SELECT value FROM settings WHERE key='friends_only'")
+    strict = (limit is None) or (str(limit["value"]) not in ("0", "false", "off"))
+    peers = await db.fetchall("SELECT user_id FROM chat_members WHERE chat_id=?", (chat["id"],))
+    other = next((int(r["user_id"]) for r in peers if int(r["user_id"]) != user_id), None)
+    if other is None:
+        return
+    if await blocked_between(user_id, other):
+        raise HTTPException(status.HTTP_403_FORBIDDEN,
+                            detail={"code": "BLOCKED", "message": "Переписка недоступна: пользователь заблокирован"})
+    if strict and not await are_friends(user_id, other):
+        raise HTTPException(status.HTTP_403_FORBIDDEN,
+                            detail={"code": "NOT_FRIENDS", "message": "Сначала примите заявку в друзья"})
+
+
 async def touch_chat(chat_id: str) -> None:
     await db.execute("UPDATE chats SET updated_at=? WHERE id=?", (int(time.time()), chat_id))

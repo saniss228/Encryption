@@ -88,7 +88,7 @@ MAX_MESSAGE_BYTES = int(os.getenv("ENC_MAX_MESSAGE_BYTES", str(64 * 1024)))
 GROUP_MAX_MEMBERS = int(os.getenv("ENC_GROUP_MAX", "200"))
 RECOVERY_WORDS = int(os.getenv("ENC_RECOVERY_WORDS", "24"))   # BIP39-фраза
 
-VERSION = "3.3.0"      # единый порт 3000 для сервера и всех клиентов
+VERSION = "3.4.0"      # единый порт 3000 для сервера и всех клиентов
 
 # ── Администрирование ───────────────────────────────────────────────────────
 # Логины, получающие админ-права (панель управления сервером).

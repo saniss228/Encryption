@@ -21,7 +21,7 @@ export ENC_BASE="http://127.0.0.1:$PORT"
 DATA="$(mktemp -d)"
 PASS=0; FAIL=0
 
-echo "══════ 1/7 Криптографическое ядро и файлы запуска ══════"
+echo "══════ 1/8 Криптографическое ядро и файлы запуска ══════"
 CORE_OK=1
 node "$ROOT/tools/tests/test_crypto.mjs" || CORE_OK=0
 # Файлы запуска для Windows: скрипт PowerShell должен быть в UTF-8 с BOM (иначе
@@ -100,8 +100,10 @@ fi
 if [ "$CORE_OK" = "1" ]; then PASS=$((PASS+1)); else FAIL=$((FAIL+1)); fi
 
 echo
-echo "══════ 2/7 API end-to-end (тестовый сервер на :$PORT) ══════"
-ENC_PORT="$PORT" ENC_DATA_DIR="$DATA" python3 -m server.app >"$DATA/server.log" 2>&1 &
+echo "══════ 2/8 API end-to-end (тестовый сервер на :$PORT) ══════"
+# В тестах лимит частоты поднят: все разделы идут с одного IP и создают
+# десятки аккаунтов в минуту — иначе получаем 429 RATE_LIMITED (боевой лимит 240/мин).
+ENC_PORT="$PORT" ENC_DATA_DIR="$DATA" ENC_RATE_LIMIT=100000 python3 -m server.app >"$DATA/server.log" 2>&1 &
 SRV=$!
 trap 'kill $SRV 2>/dev/null' EXIT
 for i in $(seq 1 30); do
@@ -111,11 +113,11 @@ done
 if node "$ROOT/tools/tests/test_api_e2e.mjs"; then PASS=$((PASS+1)); else FAIL=$((FAIL+1)); fi
 
 echo
-echo "══════ 3/7 Файлы: удаление с сервера после скачивания («только локально») ══════"
+echo "══════ 3/8 Файлы: удаление с сервера после скачивания («только локально») ══════"
 if python3 "$ROOT/tools/test_local_only.py" "$ENC_BASE"; then PASS=$((PASS+1)); else FAIL=$((FAIL+1)); fi
 
 echo
-echo "══════ 4/7 Резервная копия и перенос данных ══════"
+echo "══════ 4/8 Резервная копия и перенос данных ══════"
 if python3 "$ROOT/tools/test_backup.py" >/tmp/enc-backup-test.log 2>&1; then
   PASS=$((PASS+1)); tail -2 /tmp/enc-backup-test.log | head -1
 else
@@ -123,7 +125,7 @@ else
 fi
 
 echo
-echo "══════ 5/7 UI end-to-end (headless Chrome) ══════"
+echo "══════ 5/8 UI end-to-end (headless Chrome) ══════"
 PUP="${PUPPETEER_DIR:-}"
 if [ -n "$PUP" ] && [ -d "$PUP/node_modules/puppeteer" ]; then
   # Скрипты копируем рядом с node_modules: ESM ищет пакеты от своего файла, а не от cwd
@@ -136,11 +138,15 @@ else
 fi
 
 echo
-echo "══════ 6/7 Админ-панель: API (логин saness) ══════"
+echo "══════ 6/8 Админ-панель: API (логин saness) ══════"
 if python3 "$ROOT/tools/test_admin.py" "$ENC_BASE"; then PASS=$((PASS+1)); else FAIL=$((FAIL+1)); fi
 
 echo
-echo "══════ 7/7 Админ-панель: интерфейс в браузере ══════"
+echo "══════ 7/8 Друзья и блокировки (написать можно только друзьям) ══════"
+if ENC_ROOT="$ROOT" ENC_BASE="$ENC_BASE" node "$ROOT/tools/tests/test_friends.mjs"; then PASS=$((PASS+1)); else FAIL=$((FAIL+1)); fi
+
+echo
+echo "══════ 8/8 Админ-панель: интерфейс в браузере ══════"
 if [ -n "$PUP" ] && [ -d "$PUP/node_modules/puppeteer" ]; then
   cp "$ROOT/tools/tests/test_admin_ui.mjs" "$PUP/"
   (cd "$PUP" && ENC_ROOT="$ROOT" node test_admin_ui.mjs) && PASS=$((PASS+1)) || FAIL=$((FAIL+1))

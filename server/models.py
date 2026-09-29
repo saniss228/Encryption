@@ -187,6 +187,7 @@ class AdminBroadcastRequest(BaseModel):
 class AdminSettingsRequest(BaseModel):
     registration_open: bool | None = None
     welcome_note: str | None = Field(default=None, max_length=500)
+    friends_only: bool | None = None   # писать можно только друзьям (по умолчанию включено)
 
 
 class AdminBackupRequest(BaseModel):
@@ -201,6 +202,11 @@ class CallCreateRequest(BaseModel):
 
 class CallUpdateRequest(BaseModel):
     state: Literal["active", "ended", "declined", "missed"]
+
+
+class FriendRequestCreate(BaseModel):
+    username: str = Field(min_length=1, max_length=64)
+    message: str = Field(default="", max_length=200)
 
 
 class ContactUpdateRequest(BaseModel):

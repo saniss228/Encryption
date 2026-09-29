@@ -46,9 +46,14 @@ console.log('1 аккаунт на устройство →', dup.status, dup.da
 const bundle = await j('GET','/api/v1/users/bob/bundle', null, aliceTok);
 console.log('bundle bob:', bundle.status, !!bundle.data.bundle?.rsa_pub);
 
-// Чат и двойное шифрование
+// Чат и двойное шифрование.
+// С версии 3.4.0 писать можно только друзьям, поэтому сначала заявка и принятие.
 const chat = await j('POST','/api/v1/chats', { type:'direct', peer_username: U('bob') }, aliceTok);
 const chatId = chat.data.id;
+const fr = await j('POST','/api/v1/friends/requests', { username: U('bob') }, aliceTok);
+const frList = await j('GET','/api/v1/friends', null, bobTok);
+const frOk = await j('POST','/api/v1/friends/requests/' + frList.data.incoming[0].id + '/accept', {}, bobTok);
+console.log('заявка в друзья → принята:', fr.status, frOk.status);
 const recipients = [
   { id: aliceID.userId, rsa_pub: aliceID.rsa.pub, ik_dh_pub: aliceID.dh.pub },
   { id: bobID.userId, rsa_pub: bobID.rsa.pub, ik_dh_pub: bobID.dh.pub },

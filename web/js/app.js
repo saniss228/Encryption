@@ -36,7 +36,27 @@
   App.openChat = (id) => openChat(id);
   App.openAttachment = (m) => openAttachment(m);
   App.openSettings = (t) => openSettings(t);
+  App.renderMessages = (id) => renderMessages(id);
+  App.renderChatList = () => renderChatList();
+  App.markLocalOnly = (m, att, silent) => markLocalOnly(m, att, silent);
+  App.toast = (text, kind, ms) => toast(text, kind, ms);
   App.serverBase = null;
+
+  /** Открыть личный чат по логину: создать при необходимости и показать. */
+  App.ensureDirectChat = async function (username) {
+    try {
+      const chat = await App.api.post('/api/v1/chats', { type: 'direct', peer_username: username });
+      if (!App.chatsById[chat.id]) App.chats.unshift(chat);
+      App.chatsById[chat.id] = chat;
+      hydrateChat(chat);
+      renderChatList();
+      await openChat(chat.id);
+      return chat;
+    } catch (e) {
+      toast((e && e.message) || T('conn.error'), 'err');
+      return null;
+    }
+  };
 
   /* ══ Серверы: официальный и свой ════════════════════════════════════════ */
   // Официальный сервер проекта. Свои адреса пользователь вводит сам — они
@@ -260,6 +280,7 @@
     });
     startTtlTicker();
     notifyPermission();
+    Friends.load();
     loadAnnouncements();
     setInterval(loadAnnouncements, 300000);   // раз в 5 минут — на случай пропущенной рассылки
   }
@@ -506,6 +527,7 @@
           <div class="ci-top">
             <span class="ci-last">${esc(lastPreview(chat))}</span>
             <span class="ci-badges">
+              ${relationChip(chat)}
               ${chat.me && chat.me.muted_until > Date.now() / 1000 ? '<span class="lock-mini">🔕</span>' : ''}
               ${chat.me && chat.me.pinned ? '<span class="lock-mini">📌</span>' : ''}
               ${chat.unread ? `<span class="unread">${chat.unread}</span>` : ''}
@@ -516,6 +538,17 @@
       el.onclick = () => openChat(chat.id);
       list.appendChild(el);
     });
+  }
+
+  /** Небольшая метка в списке чатов: «не в друзьях» / «заблокирован». */
+  function relationChip(chat) {
+    if (!chat || chat.type !== 'direct' || !Friends.loaded) return '';
+    const peer = Friends.peerOfChat(chat);
+    if (!peer) return '';
+    const rel = Friends.relationOf(peer.id);
+    if (rel === 'friend') return '';
+    if (rel === 'blocked') return `<span class="role-chip">${esc(T('friends.blockedBadge'))}</span>`;
+    return `<span class="role-chip">${esc(T('chat.notFriends'))}</span>`;
   }
 
   function lastPreview(chat) {
@@ -537,6 +570,7 @@
     $('chatView').classList.remove('hidden');
     document.querySelector('.main-screen').classList.add('chat-open');
     renderChatHead(chat);
+    Friends.applyGate(chat);
     renderChatList();
     await loadMessages(chatId);
     markRead(chatId);
@@ -653,23 +687,8 @@
     el.className = 'msg ' + (m.out ? 'out' : '') + (m.deleted ? ' deleted' : '') + (m.pending ? ' pending' : '') + (m.burn ? ' burn' : '');
     el.dataset.mid = m.id;
     const reply = m.replyTo && (App.messages[m.chatId] || []).find((x) => x.id === m.replyTo);
-    const att = m.attachment;
-    const localOnly = !!(m.localOnly || (att && att.localOnly));
-    let attHTML = '';
-    if (att) {
-      // Значок «только локально»: копии на сервере больше нет, файл есть лишь у получателя
-      const badge = localOnly
-        ? `<div class="local-badge" title="${esc(m.out ? T('file.localOnlyOwnerNote') : T('file.localOnlyNote'))}">
-             🔒 ${esc(T('file.localOnlyBadge'))}</div>`
-        : '';
-      const note = localOnly
-        ? `<small class="local-note">${esc(m.out ? T('file.localOnlyOwnerNote') : T('file.localOnlyNote'))}</small>`
-        : `<small>${UI.size(att.size)} • ${esc(T('file.attachmentNote'))}</small>`;
-      if (att.kind === 'image') attHTML = `<div class="attachment"><img data-att="${esc(m.id)}" alt="${esc(att.name || '')}">${badge}</div>`;
-      else if (att.kind === 'video') attHTML = `<div class="attachment"><video data-att="${esc(m.id)}" controls></video>${badge}</div>`;
-      else if (att.kind === 'voice') attHTML = `<div class="att-card"><span class="att-icon">🎙</span><div class="att-body"><b>${esc(T('file.voiceMessage'))}</b><small data-voice="${esc(m.id)}">${esc(T('file.tapToPlay'))}</small>${localOnly ? note : ''}</div></div>`;
-      else attHTML = `<div class="att-card" data-dl="${esc(m.id)}"><span class="att-icon">📄</span><div class="att-body"><b>${esc(att.name || 'file')}</b>${note}</div></div>${badge}`;
-    }
+    // Вложения рисует модуль Media: картинки и видео видны сразу, голосовые — плеером
+    const attHTML = Media.attachmentHTML(m);
     const ttlLeft = m.expires_at ? Math.max(0, m.expires_at - Date.now() / 1000) : 0;
     const showTicks = m.out ? (m.receipts.some((r) => r.state === 'read') ? '✓✓' : (m.receipts.some((r) => r.state === 'delivered') ? '✓✓' : '✓')) : '';
     el.innerHTML = `
@@ -703,12 +722,7 @@
     el.querySelectorAll('.reaction').forEach((r) => {
       r.onclick = (ev) => { ev.stopPropagation(); toggleReaction(m, r.dataset.emoji); };
     });
-    const attEl = el.querySelector('[data-att]');
-    if (attEl) attEl.onclick = () => openAttachment(m);
-    const dlEl = el.querySelector('[data-dl]');
-    if (dlEl) dlEl.onclick = () => openAttachment(m);
-    const vv = el.querySelector('[data-voice]');
-    if (vv) vv.onclick = () => openAttachment(m);
+    Media.bind(el, m);
     const jump = el.querySelector('[data-jump]');
     if (jump) jump.onclick = () => { const n = document.querySelector(`[data-mid="${jump.dataset.jump}"]`); n && n.scrollIntoView({ behavior: 'smooth', block: 'center' }); };
     return el;
@@ -776,7 +790,16 @@
       updateChatFromMessage(chat.id, local);
       clearReply();
     } catch (e) {
-      toast(e.message || T('msg.notSent'), 'err');
+      // Понятные подсказки вместо кода ошибки: переписка только для друзей
+      if (e.code === 'NOT_FRIENDS') {
+        toast(T('msg.needFriends'), 'err', 6000);
+        Friends.applyGateToActive();
+      } else if (e.code === 'BLOCKED') {
+        toast(T('msg.blocked'), 'err', 6000);
+        Friends.applyGateToActive();
+      } else {
+        toast(e.message || T('msg.notSent'), 'err');
+      }
       if (e.code === 'NETWORK') {
         const mid = 'm' + Crypto.randomId(8);
         toast(T('msg.queued'), '', 6000);
@@ -930,79 +953,21 @@
   }
 
   async function openAttachment(m) {
-    const att = m.attachment;
-    if (!att) return;
-    if (att.localOnly || m.localOnly) {
-      modal(T('file.localOnlyBadge'), `<p>${esc(m.out ? T('file.localOnlyOwnerNote') : T('file.localOnlyNote'))}</p>`,
-        { actions: false });
-      return;
-    }
-    modal(T('file.downloading', { name: att.name }), `<div class="progress"><i id="dlProgress"></i></div>
-      <p class="muted small">${esc(T('file.decryptNote'))}</p><div id="dlBody"></div>`, { actions: false });
-    try {
-      const key = await Crypto.keyFromB64(att.key);
-      const parts = [];
-      // В демо-режиме чанки берутся из встроенного эмулятора, в обычном — с сервера.
-      let demoBlob = null;
-      if (App.demo) demoBlob = await App.api.downloadBlob(att.file_id, att);
-      for (let i = 0; i < att.chunks; i++) {
-        let enc;
-        if (demoBlob) {
-          const cs = att.chunk_size || Crypto.FILE_CHUNK;
-          enc = new Uint8Array(await demoBlob.slice(i * cs, Math.min((i + 1) * cs, demoBlob.size)).arrayBuffer());
-        } else {
-          const res = await fetch(`${App.api.base}/api/v1/files/${att.file_id}/chunk?index=${i}`, {
-            headers: App.api.access ? { 'Authorization': 'Bearer ' + App.api.access } : {},
-          });
-          if (!res.ok) {
-            let code = 'FILE_CHUNK';
-            try {
-              const j = await res.clone().json();
-              code = (j && j.error && j.error.code) || (j && j.detail && j.detail.code) || code;
-            } catch (e) { /* тело не JSON */ }
-            throw Object.assign(new Error(T('file.loadError')), { code });
-          }
-          enc = new Uint8Array(await res.arrayBuffer());
-        }
-        const pt = await Crypto.decryptChunk(key, i, enc, new TextEncoder().encode('file|' + att.file_id));
-        parts.push(pt);
-        $('dlProgress').style.width = Math.round(((i + 1) / att.chunks) * 100) + '%';
-      }
-      const blob = new Blob(parts, { type: att.mime || 'application/octet-stream' });
-      const url = URL.createObjectURL(blob);
-      const body = $('dlBody');
-      const note = `<p class="local-note">🔒 ${esc(T('file.localOnlyBadge'))}<br>${esc(T('file.savedNote'))}</p>`;
-      if (att.kind === 'image') body.innerHTML = `<img src="${url}" style="max-width:100%;border-radius:12px">${note}`;
-      else if (att.kind === 'video') body.innerHTML = `<video src="${url}" controls autoplay style="max-width:100%;border-radius:12px"></video>${note}`;
-      else if (att.kind === 'voice') body.innerHTML = `<audio src="${url}" controls autoplay style="width:100%"></audio>${note}`;
-      else body.innerHTML = `<a class="btn primary" href="${url}" download="${esc(att.name)}">${esc(T('file.download', { name: att.name }))}</a>${note}`;
-      await markLocalOnly(m, att);
-    } catch (e) {
-      if (e && e.code === 'LOCAL_ONLY') {
-        // Файл уже удалён с сервера: показываем спокойное объяснение вместо ошибки
-        att.localOnly = true;
-        m.localOnly = true;
-        $('dlBody').innerHTML = `<div class="local-badge">🔒 ${esc(T('file.localOnlyBadge'))}</div>
-          <p class="local-note">${esc(m.out ? T('file.localOnlyOwnerNote') : T('file.localOnlyNote'))}</p>`;
-        if (App.activeChatId === m.chatId) renderMessages(m.chatId);
-        return;
-      }
-      $('dlBody').innerHTML = `<p class="badge bad">${esc(e.message || T('file.loadError'))}</p>`;
-    }
+    return Media.open(m);
   }
 
   /**
    * Файл скачан и расшифрован на устройстве → сообщаем серверу,
    * он удаляет свою копию: файл становится «только локальным».
    */
-  async function markLocalOnly(m, att) {
+  async function markLocalOnly(m, att, silent) {
     att.localOnly = true;
     m.localOnly = true;
     try {
       await App.api.post(`/api/v1/files/${att.file_id}/consumed`, {});
-      toast(T('file.localOnlyNote'), 'ok', 6000);
+      if (!silent) toast(T('file.localOnlyNote'), 'ok', 6000);
     } catch (e) { /* сервер мог уже удалить копию сам */ }
-    if (App.activeChatId === m.chatId) renderMessages(m.chatId);
+    if (App.activeChatId === m.chatId && !silent) renderMessages(m.chatId);
   }
 
   /* ══ Объявления администратора ══════════════════════════════════════════ */
@@ -1073,6 +1038,7 @@
         if (ev.online) {
           toast(T('conn.restored'), 'ok', 2000);
           loadChats();
+          Friends.load();      // список друзей мог измениться, пока связи не было
         }
         break;
       case 'hello':
@@ -1086,6 +1052,13 @@
         if (App.activeChatId) renderChatHead(App.chatsById[App.activeChatId]);
         break;
       }
+      case 'friend.request':
+      case 'friend.accepted':
+      case 'friend.declined':
+      case 'friend.removed':
+      case 'friend.request.cancelled':
+        Friends.onEvent(ev);
+        break;
       case 'message':
         await onIncoming(ev.message);
         break;
@@ -1162,7 +1135,8 @@
         }
         break;
       case 'call.invite':
-        toast(T(ev.kind === 'video' ? 'call.incomingVideo' : 'call.incomingAudio'), '', 8000);
+        // Окно входящего звонка и уведомление показывает модуль звонков — здесь
+        // не дублируем (в v3.3.0 выходило два одинаковых уведомления).
         Call.incoming(ev);
         break;
       case 'call.signal':
@@ -1292,8 +1266,49 @@
         <h3>${esc(T('chatmenu.controls'))}</h3>
         <button class="btn" id="inviteBtn">${esc(T('chatmenu.createInvite'))}</button>
         <button class="btn danger" id="leaveBtn" style="margin-top:8px">${esc(T('chatmenu.leaveGroup'))}</button>` : ''}
+      ${chat.type === 'direct' ? `<h3>${esc(T('friends.title'))}</h3>
+        <div id="friendActions"></div>` : ''}
       <h3>${esc(T('chatmenu.dangerZone'))}</h3>
       <button class="btn danger" id="clearChatBtn">${esc(T('chatmenu.clearChat'))}</button>`;
+
+    // Дружба и блокировка прямо из карточки собеседника
+    if (chat.type === 'direct' && peer && peer.id) {
+      const rel = Friends.relationOf(peer.id);
+      const fa = body.querySelector('#friendActions');
+      const inc = Friends.incomingFrom(peer.id);
+      let html = '';
+      if (rel === 'friend') {
+        html = `<button class="btn" id="faWrite">${esc(T('friends.write'))}</button>
+          <button class="btn ghost" id="faRemove" style="margin-top:8px">${esc(T('friends.remove'))}</button>
+          <button class="btn danger" id="faBlock" style="margin-top:8px">${esc(T('friends.block'))}</button>`;
+      } else if (rel === 'blocked') {
+        html = `<p class="muted small">${esc(T('friends.youBlocked'))}</p>
+          <button class="btn primary" id="faUnblock">${esc(T('friends.unblock'))}</button>
+          <button class="btn danger" id="faRemove" style="margin-top:8px">${esc(T('friends.remove'))}</button>`;
+      } else if (rel === 'incoming') {
+        html = `<p class="muted small">${esc(T('friends.gateIncoming', { name: peerName(chat) }))}</p>
+          <button class="btn primary" id="faAccept">${esc(T('friends.accept'))}</button>
+          <button class="btn ghost" id="faDecline" style="margin-top:8px">${esc(T('friends.decline'))}</button>`;
+      } else if (rel === 'outgoing') {
+        html = `<p class="muted small">${esc(T('friends.requested'))}</p>
+          <button class="btn ghost" id="faCancel">${esc(T('friends.cancel'))}</button>`;
+      } else {
+        html = `<p class="muted small">${esc(T('friends.requestNote'))}</p>
+          <button class="btn primary" id="faAdd">${esc(T('friends.add'))}</button>`;
+      }
+      if (fa) {
+        fa.innerHTML = html;
+        const on = (id, fn) => { const b = fa.querySelector(id); if (b) b.onclick = fn; };
+        on('#faWrite', () => openChat(chat.id));
+        on('#faAdd', () => Friends.request(peer.username));
+        on('#faAccept', () => inc && Friends.accept(inc.id));
+        on('#faDecline', () => inc && Friends.decline(inc.id));
+        on('#faCancel', () => { const o = Friends.outgoingTo(peer.id); o && Friends.cancel(o.id); });
+        on('#faRemove', () => Friends.remove(peer.id));
+        on('#faBlock', () => Friends.block(peer.id));
+        on('#faUnblock', () => Friends.unblock(peer.id));
+      }
+    }
     $('ttlSelect').onchange = async (e) => {
       const v = parseInt(e.target.value, 10);
       await App.api.patch('/api/v1/chats/' + chat.id, { ttl_seconds: v });
@@ -1660,10 +1675,21 @@
           if (q.length < 1) return;
           try {
             const r = await App.api.get('/api/v1/users/search', { q });
-            $('ncResults').innerHTML = (r.users || []).map((u) => `<div class="list-row" data-u="${esc(u.username)}">
+            const list = r.users || [];
+            $('ncResults').innerHTML = list.length ? list.map((u) => `<div class="list-row" data-u="${esc(u.username)}">
               ${UI.avatarHTML(u, 'sm')}<div class="grow"><b>${esc(u.display_name || u.username)}</b><br><small>@${esc(u.username)}</small></div>
-              <button class="btn">${esc(T('newchat.write'))}</button></div>`).join('') || esc(T('newchat.nothing'));
-            $('ncResults').querySelectorAll('[data-u]').forEach((row) => row.onclick = () => createChat({ peer_username: row.dataset.u }));
+              ${Friends.actionButtonHTML(u)}</div>`).join('') : esc(T('newchat.nothing'));
+            // Просто «написать» незнакомцу нельзя: сначала заявка в друзья
+            $('ncResults').querySelectorAll('[data-fa]').forEach((btn) => {
+              btn.onclick = async (e) => {
+                e.stopPropagation();
+                const act = btn.dataset.fa;
+                if (act === 'write') { closeModal(); await App.ensureDirectChat(btn.dataset.username); }
+                else if (act === 'add') { await Friends.request(btn.dataset.username); newChatBody('user'); }
+                else if (act === 'accept') { await Friends.accept(btn.dataset.rid); newChatBody('user'); }
+                else if (act === 'unblock') { await Friends.unblock(Number(btn.dataset.uid)); newChatBody('user'); }
+              };
+            });
           } catch (e) { $('ncResults').textContent = e.message; }
         }, 300);
       };
@@ -1842,6 +1868,7 @@
 
     // Основной интерфейс
     $('newChatBtn').onclick = newChatDialog;
+    $('friendsBtn').onclick = () => Friends.panel();
     $('burgerBtn').onclick = () => openSettings('profile');
     $('meBtn').onclick = () => openSettings('profile');
     $('chatSearch').oninput = () => { renderChatList(); localSearch(($('chatSearch').value || '').trim()); };

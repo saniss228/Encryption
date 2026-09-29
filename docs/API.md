@@ -1,4 +1,4 @@
-# API Encryption v3.3.0
+# API Encryption v3.4.0
 
 Полный справочник по HTTP и WebSocket API сервера **Encryption**.
 Сервер ничего не знает о содержимом сообщений: он принимает и хранит только
@@ -15,7 +15,7 @@
 | Порт бэкенда за nginx | `3000` (uvicorn; nginx отдаёт сайт на 80/443) |
 | Формат | JSON (`Content-Type: application/json`), файлы — октет-поток |
 | Версия API | `v1` (`/api/v1/...`) |
-| Версия продукта | `3.3.0` |
+| Версия продукта | `3.4.0` |
 | Аутентификация | `Authorization: Bearer <access_token>` |
 | Время жизни access-токена | 15 минут |
 | Время жизни refresh-токена | 30 дней (ротация при каждом обновлении) |
@@ -23,7 +23,7 @@
 | «Один аккаунт на устройство» | жёсткая привязка `device_id`, освобождение — карантин 30 дней |
 | Администратор | логины из `ENC_ADMINS` (по умолчанию `saness`) → раздел 9.1 |
 
-Здоровье сервиса: `GET /api/v1/health` → `{"status":"ok","version":"3.3.0","file_ttl_hours":24,...}`
+Здоровье сервиса: `GET /api/v1/health` → `{"status":"ok","version":"3.4.0","file_ttl_hours":24,...}`
 
 ### Формат ошибок
 
@@ -106,7 +106,7 @@
     "ik_dh_pub": "…", "ik_sign_pub": "…", "rsa_pub": "…",
     "spk_pub": "…", "spk_sig": "…", "one_time_keys": ["…"]
   },
-  "device": { "device_id": "0f6a…e1", "name": "Ноутбук", "platform": "web", "app_version": "3.3.0" },
+  "device": { "device_id": "0f6a…e1", "name": "Ноутбук", "platform": "web", "app_version": "3.4.0" },
   "key_backup": { "alg": "AES-256-GCM", "iv": "…", "ct": "…" },
   "recovery":  { "alg": "Argon2id+AES-GCM", "iv": "…", "ct": "…" }
 }
@@ -334,13 +334,34 @@
 | `GET` | `/api/v1/calls` | история звонков |
 | `GET` | `/api/v1/security/log` | журнал безопасности (входы, отвязки, удаления файлов) |
 
+### 8.1 Друзья и блокировка (v3.4.0)
+
+С версии 3.4.0 писать в личный чат можно только друзьям: пока заявка не принята,
+отправка сообщения возвращает `403 NOT_FRIENDS`, а заблокированный — `403 BLOCKED`.
+Правило отключается настройкой сервера `ENC_FRIENDS_ONLY=0`.
+
+| Метод | Путь | Назначение |
+|---|---|---|
+| `GET` | `/api/v1/friends` | `{"friends":[…],"incoming":[…],"outgoing":[…],"blocked":[…],"loaded":true}` |
+| `POST` | `/api/v1/friends/requests` | `{"username":"boris"}` → заявка (`201`), id — строковый токен `fr…` |
+| `POST` | `/api/v1/friends/requests/{rid}/accept` | принять заявку (дружба становится двусторонней) |
+| `POST` | `/api/v1/friends/requests/{rid}/decline` | отклонить заявку (отправитель видит счётчик) |
+| `DELETE` | `/api/v1/friends/requests/{rid}` | отозвать свою заявку |
+| `DELETE` | `/api/v1/friends/{user_id}` | удалить из друзей (обе записи, чат остаётся) |
+| `POST` | `/api/v1/friends/{user_id}/block` | заблокировать: своя запись помечается `blocked=1`, запись собеседника удаляется, заявки в обе стороны сбрасываются |
+| `POST` | `/api/v1/friends/{user_id}/unblock` | снять блокировку |
+
+События по WebSocket: `friend.request`, `friend.accepted`, `friend.declined`,
+`friend.request.cancelled` и `friend.removed` (последнее приходит и при удалении из
+друзей, и при блокировке — собеседник просто видит, что переписка закрыта).
+
 ---
 
 ## 9. Служебные точки
 
 | Метод | Путь | Ответ |
 |---|---|---|
-| `GET` | `/api/v1/health` | `{"status":"ok","app":"Encryption","version":"3.3.0","file_ttl_hours":24}` |
+| `GET` | `/api/v1/health` | `{"status":"ok","app":"Encryption","version":"3.4.0","file_ttl_hours":24}` |
 | `GET` | `/api/v1/security/policy` | четыре слоя защиты и правила хранения файлов |
 | `GET` | `/api/v1/site/info` | сведения для клиента (версия, лимиты) |
 | `GET` | `/` | сайт (одностраничный клиент) |

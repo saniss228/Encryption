@@ -357,3 +357,95 @@ label input, label textarea, label select { margin-top: 5px; color: var(--text);
 /* ── Список шагов в админ-панели ──────────────────────────────────────────── */
 .adm-list { margin: 8px 0 0 18px; padding: 0; color: var(--muted); font-size: 12.5px; }
 .adm-list li { margin-bottom: 4px; }
+
+/* ══ Кнопка «закрыть» (крестик) для окон и оверлеев ═════════════════════════ */
+.x-btn {
+  background: transparent; border: 1px solid var(--line); color: var(--muted);
+  width: 32px; height: 32px; min-width: 32px; border-radius: 10px; cursor: pointer;
+  font-size: 15px; line-height: 1; display: grid; place-items: center;
+}
+.x-btn:hover { background: var(--bg-3); color: var(--text); }
+.modal-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.modal-head h2 { margin: 0; flex: 1; min-width: 0; }
+.modal-content { display: block; }
+
+/* Кнопка «Друзья» со счётчиком новых заявок */
+.badge-dot { position: relative; }
+.badge-dot .dot {
+  position: absolute; top: -5px; right: -5px; min-width: 18px; height: 18px; padding: 0 4px;
+  border-radius: 20px; background: var(--danger); color: #fff; font-size: 11px; font-weight: 700;
+  display: grid; place-items: center;
+}
+
+/* ══ Друзья / заявки / блокировки ══════════════════════════════════════════ */
+.friend-row { display: flex; align-items: center; gap: 10px; padding: 8px 6px; border-bottom: 1px solid var(--line); }
+.friend-row:last-child { border-bottom: none; }
+.friend-row .fr-body { flex: 1; min-width: 0; }
+.friend-row .fr-body b { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.friend-row .fr-body small { color: var(--muted); }
+.friend-row .fr-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.friend-note { font-size: 12px; color: var(--muted); margin: 6px 2px 0; line-height: 1.45; }
+.online-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); margin-right: 5px; }
+.online-dot.on { background: var(--ok); }
+.role-chip { font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 20px; padding: 1px 7px; }
+
+/* Полоса-подсказка в чате: пока переписка недоступна */
+.friend-gate {
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+  margin: 0 12px 8px; padding: 10px 12px; border-radius: 12px;
+  background: #1d2740; border: 1px dashed #3d5588;
+}
+.friend-gate.blocked { background: #3a1d22; border-color: #7a3540; }
+.friend-gate .fg-text { flex: 1; min-width: 180px; }
+.friend-gate .fg-text b { display: block; font-size: 13.5px; }
+.friend-gate .fg-text small { color: var(--muted); font-size: 12px; }
+.friend-gate .fg-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* ══ Голосовое сообщение: понятный плеер ═══════════════════════════════════ */
+.voice-card { display: flex; align-items: center; gap: 10px; padding: 4px 2px; min-width: 210px; }
+.voice-play {
+  width: 38px; height: 38px; min-width: 38px; border-radius: 50%; border: none; cursor: pointer;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; font-size: 15px;
+  display: grid; place-items: center;
+}
+.voice-play.playing { background: #2c6b3f; }
+.voice-bar { flex: 1; height: 6px; border-radius: 20px; background: rgba(127,127,127,.35); cursor: pointer; overflow: hidden; }
+.voice-bar i { display: block; height: 100%; width: 0; background: var(--accent); }
+.voice-time { font-size: 11.5px; color: var(--muted); min-width: 34px; text-align: right; font-variant-numeric: tabular-nums; }
+.msg.out .voice-time { color: rgba(255,255,255,.8); }
+.voice-hint { font-size: 11.5px; color: var(--muted); }
+.voice-dl { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 14px; padding: 2px 4px; }
+.voice-dl:hover { color: var(--text); }
+
+/* ══ Картинки и видео в переписке видны сразу ══════════════════════════════ */
+.attachment { position: relative; margin-top: 4px; }
+.att-img {
+  display: block; max-width: min(360px, 100%); max-height: 340px; border-radius: 12px; cursor: zoom-in;
+  background: var(--bg-3); min-height: 90px; min-width: 140px; object-fit: cover;
+}
+.att-img.loaded { min-height: 0; }
+.att-video { display: block; max-width: min(420px, 100%); border-radius: 12px; background: #000; }
+.att-loading {
+  position: absolute; inset: 0; display: grid; place-items: center; border-radius: 12px;
+  background: rgba(0,0,0,.25); color: #fff; font-size: 12px;
+}
+.att-loading.hidden { display: none !important; }
+.att-fallback { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--line);
+  border-radius: 12px; background: var(--bg-3); cursor: pointer; font-size: 13px; }
+
+/* ══ Окно звонка: крестик и кнопки приёма ══════════════════════════════════ */
+.call-box { position: relative; }
+.call-x { position: absolute; top: 10px; right: 10px; z-index: 3; background: rgba(0,0,0,.35); }
+.call-incoming { display: flex; gap: 26px; justify-content: center; margin: 14px 0 4px; }
+.call-incoming .ctrl {
+  flex-direction: column; gap: 6px; width: 74px; height: 74px;
+}
+.call-incoming .ctrl small { font-size: 11px; color: var(--muted); }
+.ctrl.accept { background: #2c6b3f; }
+.ctrl.accept:hover { background: #35804b; }
+.ctrl.decline { background: #a3243c; }
+.call-controls { display: flex; gap: 10px; justify-content: center; margin: 12px 0 4px; }
+@media (max-width: 520px) {
+  .call-incoming { gap: 18px; }
+  .call-incoming .ctrl { width: 66px; height: 66px; }
+}

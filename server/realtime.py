@@ -159,7 +159,7 @@ async def _handle(ws: WebSocket, uid: int, device_id: str, msg: dict[str, Any]) 
 
     if t == "typing":
         chat_id = str(msg.get("chat_id") or "")
-        if not chat_id or not await _is_member(chat_id, uid):
+        if not chat_id or not await _is_member(chat_id, uid) or not await _chat_allows(chat_id, uid):
             return
         await _relay_chat(chat_id, {
             "t": "typing", "chat_id": chat_id, "user_id": uid,
@@ -184,6 +184,9 @@ async def _handle(ws: WebSocket, uid: int, device_id: str, msg: dict[str, Any]) 
         to = int(msg.get("to") or 0)
         if to <= 0 or to == uid:
             return
+        from .routes.friends import blocked_between
+        if await blocked_between(uid, to):
+            return
         await hub.send_to_user(to, {
             "t": "call.signal", "from": uid, "call_id": msg.get("call_id"),
             "kind": msg.get("kind", "audio"), "signal": msg.get("signal"),
@@ -197,8 +200,9 @@ async def _handle(ws: WebSocket, uid: int, device_id: str, msg: dict[str, Any]) 
         if not chat_id or not await _is_member(chat_id, uid):
             return
         members = await db.fetchall("SELECT user_id FROM chat_members WHERE chat_id=?", (chat_id,))
+        from .routes.friends import blocked_between
         for m in members:
-            if int(m["user_id"]) == uid:
+            if int(m["user_id"]) == uid or await blocked_between(uid, int(m["user_id"])):
                 continue
             await hub.send_to_user(int(m["user_id"]), {
                 "t": "call.invite", "chat_id": chat_id, "from": uid,
@@ -210,6 +214,23 @@ async def _handle(ws: WebSocket, uid: int, device_id: str, msg: dict[str, Any]) 
         await ws.send_text(json.dumps({
             "t": "sync", "online": sorted(hub.online_users()), "at": int(time.time())}))
         return
+
+
+async def _chat_allows(chat_id: str, user_id: int) -> bool:
+    """Разрешена ли переписка в этом чате (в личке — только с друзьями)."""
+    chat = await db.fetchone("SELECT type FROM chats WHERE id=?", (chat_id,))
+    if not chat or chat["type"] != "direct":
+        return True
+    members = await db.fetchall("SELECT user_id FROM chat_members WHERE chat_id=?", (chat_id,))
+    other = next((int(m["user_id"]) for m in members if int(m["user_id"]) != user_id), None)
+    if other is None:
+        return True
+    from .routes.friends import are_friends, blocked_between
+    if await blocked_between(user_id, other):
+        return False
+    limit = await db.fetchone("SELECT value FROM settings WHERE key='friends_only'")
+    strict = (limit is None) or (str(limit["value"]) not in ("0", "false", "off"))
+    return (not strict) or await are_friends(user_id, other)
 
 
 async def _is_member(chat_id: str, user_id: int) -> bool:

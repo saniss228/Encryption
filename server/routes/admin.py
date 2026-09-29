@@ -487,6 +487,7 @@ async def get_settings(sess: dict = Depends(require_admin)):
         "settings": {
             "registration_open": kv.get("registration_open", "1") == "1",
             "welcome_note": kv.get("welcome_note", ""),
+            "friends_only": kv.get("friends_only", "1") not in ("0", "false", "off"),
         },
         "env": {
             "admins": sorted(ADMIN_USERNAMES),
@@ -507,6 +508,9 @@ async def put_settings(body: AdminSettingsRequest, sess: dict = Depends(require_
     if body.welcome_note is not None:
         await set_setting("welcome_note", body.welcome_note[:500], int(actor["id"]))
         changed["welcome_note"] = body.welcome_note[:500]
+    if body.friends_only is not None:
+        await set_setting("friends_only", "1" if body.friends_only else "0", int(actor["id"]))
+        changed["friends_only"] = body.friends_only
     await db.audit("admin_settings", actor=int(actor["id"]), changed=changed)
     return {"ok": True, "changed": changed}
 

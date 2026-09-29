@@ -17,8 +17,8 @@ from .. import db
 from ..config import MAX_MESSAGE_BYTES
 from ..models import MessageCreateRequest, MessageUpdateRequest, ReactionRequest, ReceiptRequest
 from ..security import current_session
-from ._common import (chat_or_404, fanout, load_reactions, load_receipts, member, member_ids,
-                      message_json, touch_chat)
+from ._common import (chat_or_404, ensure_can_write, fanout, load_reactions, load_receipts,
+                      member, member_ids, message_json, touch_chat)
 
 router = APIRouter(prefix="/api/v1/messages", tags=["messages"])
 
@@ -66,6 +66,7 @@ async def send_message(body: MessageCreateRequest, sess: dict = Depends(current_
     uid = int(sess["user"]["id"])
     m = await member(body.chat_id, uid)
     chat = await chat_or_404(body.chat_id)
+    await ensure_can_write(chat, uid)
     _validate_payload(body.payload)
 
     if body.reply_to:

@@ -30,11 +30,16 @@
   function modal(title, html, opts) {
     opts = opts || {};
     const body = $('modalBody');
-    body.innerHTML = `<h2>${esc(title)}</h2>${html}` +
+    // У каждого окна есть крестик: закрыть можно кнопкой, клавишей Esc или щелчком по фону.
+    body.innerHTML = `<div class="modal-head"><h2>${esc(title)}</h2>` +
+      `<button class="x-btn" id="modalClose" type="button" title="${esc(t('common.close'))}" aria-label="${esc(t('common.close'))}">✕</button></div>` +
+      `<div class="modal-content">${html}</div>` +
       (opts.actions === false ? '' : `<div class="modal-actions" id="modalActions"></div>`);
     $('modal').classList.remove('hidden');
     $('modalBackdrop').classList.remove('hidden');
     modalOnClose = opts.onClose || null;
+    const x = $('modalClose');
+    if (x) x.onclick = () => closeModal();
     return body;
   }
   function closeModal() {
@@ -148,6 +153,16 @@
       setTimeout(() => { o.stop(); ctx.close(); }, 140);
     } catch (e) {}
   }
+
+  // Закрытие окон «накрест»: клавиша Esc и щелчок по затемнённому фону
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (!$('modal').classList.contains('hidden')) { closeModal(); return; }
+    if (window.Call && typeof Call.isOpen === 'function' && Call.isOpen()) Call.hangup();
+  });
+  document.addEventListener('click', (e) => {
+    if (e.target && e.target.id === 'modalBackdrop') closeModal();
+  });
 
   global.UI = { $, qs, qsa, esc, toast, modal, closeModal, confirmDialog, avatarHTML, fillAvatar,
     initials, timeHM, dayLabel, humanTime, size, countdown, ttlLabel, codeBlock, beep, colorFor, t };
