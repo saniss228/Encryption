@@ -56,7 +56,15 @@ find "$STAGE" -name '__pycache__' -type d -prune -exec rm -rf {} + 2>/dev/null |
 find "$STAGE" -name '*.pyc' -delete 2>/dev/null || true
 
 mkdir -p "$STAGE/release/desktop" "$STAGE/release/android"
-cp -a "$REL/desktop/Encryption-${VERSION}-win-x64-portable.exe" "$STAGE/release/desktop/" 2>/dev/null || true
+if [ -f "$REL/desktop/Encryption-${VERSION}-win-x64-portable.exe" ]; then
+  cp -a "$REL/desktop/Encryption-${VERSION}-win-x64-portable.exe" "$STAGE/release/desktop/"
+else
+  # Без EXE архив «всё в одном» уже не «всё»: сообщаем и НЕ молчим.
+  echo "  ! Приложения для Windows нет: $REL/desktop/Encryption-${VERSION}-win-x64-portable.exe"
+  echo "    Архив «всё в одном» будет без него. Соберите: (cd desktop && npm i && \\"
+  echo "      WINEPREFIX=\$HOME/.cache/wine-prefix WINEARCH=win32 npx electron-builder --win portable --x64)"
+  echo "    Либо скопируйте exe из прошлой сборки/релиза перед упаковкой."
+fi
 cp -a "$REL/android/Encryption-${VERSION}.apk" "$STAGE/release/android/"
 cp -a "$REL/encryption-${VERSION}-server-web.zip" "$STAGE/release/"
 cp -a "release/КАК-УСТАНОВИТЬ.txt" "$STAGE/release/" 2>/dev/null || true

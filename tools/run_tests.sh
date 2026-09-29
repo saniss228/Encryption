@@ -23,8 +23,34 @@ PASS=0; FAIL=0
 # Тестам второй порт (для браузера) не нужен: сервер слушает только свой порт.
 export ENC_ALT_PORTS=""
 
-echo "══════ 1/7 Криптографическое ядро ══════"
-if node "$ROOT/tools/tests/test_crypto.mjs"; then PASS=$((PASS+1)); else FAIL=$((FAIL+1)); fi
+echo "══════ 1/7 Криптографическое ядро и файлы запуска ══════"
+CORE_OK=1
+node "$ROOT/tools/tests/test_crypto.mjs" || CORE_OK=0
+# Файлы запуска для Windows: скрипт PowerShell должен быть в UTF-8 с BOM (иначе
+# PowerShell 5.1 читает русский текст как ANSI и вывод превращается в «кракозябры»),
+# а .cmd — с переводами строк CRLF (иначе cmd.exe спотыкается на переходах).
+python3 - "$ROOT" <<'PYEOF' || CORE_OK=0
+import pathlib
+import sys
+
+root = pathlib.Path(sys.argv[1])
+ok = True
+ps1 = root / "tools/start-encryption.ps1"
+if ps1.read_bytes().startswith(b"\xef\xbb\xbf"):
+    print("  ✓ tools/start-encryption.ps1: UTF-8 с BOM")
+else:
+    print("  ✗ tools/start-encryption.ps1 без BOM — на Windows будет «кракозябры»")
+    ok = False
+for name in ("START-ENCRYPTION-WINDOWS.cmd", "ЗАПУСТИТЬ-МЕССЕНДЖЕР-WINDOWS.cmd"):
+    raw = (root / name).read_bytes()
+    if b"\r\n" in raw:
+        print(f"  ✓ {name}: переводы строк CRLF")
+    else:
+        print(f"  ✗ {name}: нет CRLF")
+        ok = False
+sys.exit(0 if ok else 1)
+PYEOF
+if [ "$CORE_OK" = "1" ]; then PASS=$((PASS+1)); else FAIL=$((FAIL+1)); fi
 
 echo
 echo "══════ 2/7 API end-to-end (тестовый сервер на :$PORT) ══════"
