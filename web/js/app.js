@@ -56,6 +56,19 @@
     } catch (e) { return ''; }
   }
 
+  /* Порт 6000 браузеры блокируют как небезопасный (ERR_UNSAFE_PORT). Сервер
+     слушает его для приложений (ПК и Android) и API, а сайт на том же
+     компьютере обслуживается вторым, обычным портом (8080). Поэтому если сайт
+     открыт по localhost:6000, заменяем порт — иначе из браузера связи не будет. */
+  function safeBaseForBrowser(base) {
+    try {
+      const u = new URL(base);
+      const local = u.hostname === 'localhost' || u.hostname === '127.0.0.1' || u.hostname === '[::1]';
+      if (local && u.port === '6000') { u.port = '8080'; return u.origin; }
+    } catch (e) { /* не адрес — оставляем как есть */ }
+    return base;
+  }
+
   function officialServers() {
     const list = [];
     if (location.protocol.startsWith('http')) {
@@ -93,7 +106,8 @@
   /** Проверяет адрес, сохраняет выбор и перезапускает клиент на новом сервере. */
   async function useServer(input, opts) {
     const quiet = !!(opts && opts.quiet);
-    const url = normalizeServer(input);
+    // Порт 6000 браузеры блокируют: если ввели localhost:6000 — подставляем 8080
+    const url = safeBaseForBrowser(normalizeServer(input));
     if (!url) {
       if (!quiet) toast(T('auth.server.badAddress'), 'err', 6000);
       return false;
@@ -162,10 +176,12 @@
     // Адрес сервера по приоритету: оболочка приложения → выбор пользователя →
     // адрес, с которого открыт сайт → официальный сервер.
     const picked = savedServer();
-    App.serverBase = normalizeServer(window.__SERVER_BASE__) ||
+    const base =
+      normalizeServer(window.__SERVER_BASE__) ||
       normalizeServer(window.NATIVE_APP && window.NATIVE_APP.serverBase) ||
       normalizeServer(picked && picked.url) ||
       (location.protocol.startsWith('http') ? location.origin : OFFICIAL_SERVERS[0].url);
+    App.serverBase = safeBaseForBrowser(base);
     App.api = new Api(App.serverBase);
     renderServerPicker();          // рисовать выбор сервера можно только зная адрес
     const badge = $('serverBadge');
@@ -1380,7 +1396,7 @@
               ? T('auth.server.custom') : T('auth.server.official'))}
         <p class="muted small">${esc(T('settings.server.hint'))}</p>
         <label>${esc(T('settings.server.address'))}
-          <input id="setServerUrl" value="${esc(cur)}" placeholder="http://1.2.3.4:8080"
+          <input id="setServerUrl" value="${esc(cur)}" placeholder="http://1.2.3.4:6000"
                  autocomplete="off" spellcheck="false"></label>
         <button class="btn primary" id="setServerSave">${esc(T('settings.server.apply'))}</button>
         <div class="row-between" style="margin-top:10px">

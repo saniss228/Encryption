@@ -13,6 +13,9 @@ WorkingDirectory=/opt/encryption
 # ── Переменные окружения ──────────────────────────────────────────────────
 Environment=ENC_HOST=0.0.0.0
 Environment=ENC_PORT=6000
+# Второй порт для браузера нужен только при локальном запуске скриптами; на
+# сервере сайт отдаёт nginx (80/443), поэтому здесь он выключен (пусто).
+Environment=ENC_ALT_PORTS=
 Environment=ENC_PUBLIC_IP=45.90.45.92
 Environment=ENC_DATA_DIR=/opt/encryption/data
 Environment=ENC_WEB_DIR=/opt/encryption/web

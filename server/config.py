@@ -21,9 +21,17 @@ for _d in (DATA_DIR, FILES_DIR, MEDIA_DIR, LOG_DIR):
     _d.mkdir(parents=True, exist_ok=True)
 
 # ── Сеть ────────────────────────────────────────────────────────────────────
-# Белый IP пользователя. Порт 6000 — сайт + API + WebSocket на одном порту.
+# Белый IP пользователя. Порт 6000 — сайт + API + WebSocket на одном порту:
+# к нему подключаются приложения (ПК и Android) и сайт через nginx.
 HOST = os.getenv("ENC_HOST", "0.0.0.0")
 PORT = int(os.getenv("ENC_PORT", "6000"))
+# Второй порт — только для браузера на том же компьютере: Chrome/Edge/Firefox
+# считают 6000 небезопасным (ERR_UNSAFE_PORT) и сайт на нём не открывают.
+# Сервер слушает оба порта одним процессом: приложения идут на 6000 (как на
+# сервере проекта), а браузер локально открывает обычный порт 8080.
+# Список задаётся через запятую: ENC_ALT_PORTS=8080,8000 (пусто — выключено).
+ALT_PORTS = [int(p) for p in os.getenv("ENC_ALT_PORTS", "8080").replace(" ", "").split(",")
+             if p.isdigit()]
 PUBLIC_IP = os.getenv("ENC_PUBLIC_IP", "45.90.45.92")
 PUBLIC_ORIGIN = os.getenv("ENC_PUBLIC_ORIGIN", f"http://{PUBLIC_IP}:{PORT}")
 
@@ -42,6 +50,12 @@ ALLOWED_ORIGINS = [o for o in os.getenv("ENC_ALLOWED_ORIGINS", "").split(",") if
     f"http://127.0.0.1:{PORT}",
     "null",
 ]
+# Локальные адреса дополнительных портов: браузер на этом же компьютере
+# открывает сайт на них, значит их Origin должен быть разрешён.
+for _p in ALT_PORTS:
+    for _o in (f"http://localhost:{_p}", f"http://127.0.0.1:{_p}"):
+        if _o not in ALLOWED_ORIGINS:
+            ALLOWED_ORIGINS.append(_o)
 # Разрешаем локальные адреса и локальные оболочки приложений (Origin как у file:///WebView)
 ALLOWED_ORIGIN_REGEX = os.getenv(
     "ENC_ALLOWED_ORIGIN_REGEX",
@@ -83,7 +97,7 @@ MAX_MESSAGE_BYTES = int(os.getenv("ENC_MAX_MESSAGE_BYTES", str(64 * 1024)))
 GROUP_MAX_MEMBERS = int(os.getenv("ENC_GROUP_MAX", "200"))
 RECOVERY_WORDS = int(os.getenv("ENC_RECOVERY_WORDS", "24"))   # BIP39-фраза
 
-VERSION = "3.2.1"      # надёжный запуск на Windows (без заданий PowerShell)
+VERSION = "3.2.2"      # надёжный запуск на Windows (без заданий PowerShell)
 
 # ── Администрирование ───────────────────────────────────────────────────────
 # Логины, получающие админ-права (панель управления сервером).

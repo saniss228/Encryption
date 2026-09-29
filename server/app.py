@@ -278,13 +278,52 @@ async def http_exc(request: Request, exc: HTTPException):
 
 
 def main() -> None:
+    import socket as _socket
+
     import uvicorn
-    from .config import HOST, PORT, TLS_CERT, TLS_KEY
+    from .config import ALT_PORTS, HOST, PORT, TLS_CERT, TLS_KEY
+
     kwargs = {}
     if TLS_CERT and TLS_KEY:
         kwargs.update(ssl_certfile=TLS_CERT, ssl_keyfile=TLS_KEY)
         log.info("Запуск с TLS (HTTPS/WSS)")
-    uvicorn.run("server.app:app", host=HOST, port=PORT, log_level="info", **kwargs)
+
+    # Все порты обслуживает ОДИН процесс с одним приложением и одним циклом
+    # событий: иначе у каждого слушателя была бы своя инициализация базы и своя
+    # уборка TTL, а запросы на разные порты расходились бы по данным.
+    #   6000 — приложения (ПК и Android) и API, как на сервере проекта;
+    #   8080 — сайт в браузере на этом же компьютере: порт 6000 браузеры
+    #          блокируют как «небезопасный» (ERR_UNSAFE_PORT), см. ENC_ALT_PORTS.
+    ports = [PORT] + [p for p in dict.fromkeys(ALT_PORTS) if p != PORT]
+
+    def bind_socket(port: int) -> _socket.socket:
+        infos = _socket.getaddrinfo(HOST, port, type=_socket.SOCK_STREAM, flags=_socket.AI_PASSIVE)
+        family, socktype, proto, _, addr = infos[0]
+        sock = _socket.socket(family, socktype, proto)
+        sock.setsockopt(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1)
+        sock.bind(addr)
+        sock.set_inheritable(True)
+        return sock
+
+    sockets = []
+    for p in ports:
+        try:
+            sockets.append(bind_socket(p))
+            if p != PORT:
+                log.info("Для браузера на этом компьютере открыт порт %d", p)
+        except OSError as exc:
+            if p == PORT:
+                raise
+            log.warning("Порт %d не открылся (возможно, занят): %s", p, exc)
+
+    server = uvicorn.Server(uvicorn.Config("server.app:app", host=HOST, port=PORT,
+                                           log_level="info", **kwargs))
+    if len(sockets) > 1:
+        server.run(sockets=sockets)      # оба порта: одно приложение, один lifespan
+    else:
+        for s in sockets:
+            s.close()
+        server.run()
 
 
 if __name__ == "__main__":

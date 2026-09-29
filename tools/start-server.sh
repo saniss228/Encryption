@@ -8,9 +8,15 @@
 #    3. запускает сервер, ждёт готовности и открывает сайт в браузере;
 #    4. показывает адрес для телефона в той же сети Wi-Fi.
 #
-#  Запуск:  bash tools/start-server.sh            (порт 8080)
-#           bash tools/start-server.sh 9000       (свой порт)
-#           PORT=8080 NO_BROWSER=1 bash tools/start-server.sh
+#  Порты: 6000 — приложения (ПК и Android) и API (как на сервере проекта);
+#         8080 — сайт в браузере на этом компьютере, потому что порт 6000
+#         Chrome/Edge блокируют как «небезопасный» (ERR_UNSAFE_PORT).
+#         Оба порта обслуживает один и тот же процесс — данные общие.
+#
+#  Запуск:  bash tools/start-server.sh                    (6000 + 8080)
+#           bash tools/start-server.sh 6000 8080          (оба порта вручную)
+#           bash tools/start-server.sh 6000 6000          (один порт)
+#           PORT=6000 SITEPORT=8080 NO_BROWSER=1 bash tools/start-server.sh
 #
 #  Остановка: Ctrl+C.
 # ============================================================================
@@ -18,7 +24,8 @@ set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
-PORT="${1:-${PORT:-8080}}"
+PORT="${1:-${PORT:-6000}}"                 # основной порт: приложения и API
+SITEPORT="${2:-${SITEPORT:-8080}}"         # порт для браузера (6000 браузеры блокируют)
 HOST="${HOST:-0.0.0.0}"
 VENV="$ROOT/.venv"
 PY="$VENV/bin/python"
@@ -75,15 +82,25 @@ if [ -z "${NO_INSTALL:-}" ]; then
   fi
 fi
 
-if [ "$PORT" = "6000" ]; then
-  warn "⚠ Порт 6000 браузеры блокируют (ERR_UNSAFE_PORT). Лучше 8080."
+if [ "$PORT" = "$SITEPORT" ]; then
+  warn "⚠ Один порт и для приложений, и для браузера. Если это 6000 — сайт на этом компьютере в браузере не откроется."
 fi
 
-# ── Свободен ли порт ───────────────────────────────────────────────────────
-if command -v ss >/dev/null 2>&1 && ss -ltn 2>/dev/null | grep -q ":$PORT "; then
-  bad "✗ Порт $PORT уже занят (возможно, мессенджер уже запущен)."
-  say "  Откройте http://127.0.0.1:$PORT/ или запустите с другим портом:"
-  say "     bash tools/start-server.sh 8090"
+# ── Свободны ли порты ──────────────────────────────────────────────────────
+port_busy() {
+  command -v ss >/dev/null 2>&1 && ss -ltn 2>/dev/null | grep -q ":$1 " && return 0
+  command -v lsof >/dev/null 2>&1 && lsof -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1 && return 0
+  return 1
+}
+BUSY=""
+for p in "$PORT" "$SITEPORT"; do
+  [ "$p" = "$SITEPORT" ] && [ "$p" = "$PORT" ] && [ "$BUSY" != "" ] && continue
+  if port_busy "$p"; then BUSY="$p"; break; fi
+done
+if [ -n "$BUSY" ]; then
+  bad "✗ Порт $BUSY уже занят (возможно, мессенджер уже запущен)."
+  say "  Откройте http://127.0.0.1:$SITEPORT/ — или запустите с другими портами:"
+  say "     bash tools/start-server.sh 6000 8080"
   exit 5
 fi
 
@@ -95,17 +112,24 @@ fi
 [ -n "$LAN_IP" ] || LAN_IP="$(ipconfig getifaddr en0 2>/dev/null || true)"
 
 say ""
-ok "✓ Сервер запускается:"
-say "    на этом компьютере:  http://127.0.0.1:$PORT/"
-[ -n "$LAN_IP" ] && say "    с телефона (та же сеть): http://$LAN_IP:$PORT/"
-say "    данные и файлы:      $ROOT/data"
-say "    администратор:       ${ENC_ADMINS:-saniss}  (раздел «Админ-панель» в настройках)"
+ok "✓ Сервер запускается."
+say "    сайт на этом компьютере:   http://127.0.0.1:$SITEPORT/"
+[ -n "$LAN_IP" ] && say "    сайт с телефона (Wi-Fi):   http://$LAN_IP:$SITEPORT/"
+say "    порт приложений и API:     $PORT"
+[ -n "$LAN_IP" ] && say "    адрес для приложения:      http://$LAN_IP:$PORT"
+say "    данные и файлы:            $ROOT/data"
+say "    администратор:             ${ENC_ADMINS:-saniss}  (раздел «Админ-панель» в настройках)"
 say ""
 say "  Остановка сервера — Ctrl+C."
 say "══════════════════════════════════════════════════════════════════════"
 say ""
 
 export ENC_HOST="$HOST" ENC_PORT="$PORT" ENC_DATA_DIR="$ROOT/data" ENC_WEB_DIR="$ROOT/web"
+if [ "$SITEPORT" != "$PORT" ]; then
+  export ENC_ALT_PORTS="$SITEPORT"
+else
+  export ENC_ALT_PORTS=""
+fi
 export ENC_PUBLIC_IP="${ENC_PUBLIC_IP:-127.0.0.1}"
 export ENC_ADMINS="${ENC_ADMINS:-saniss}"
 
@@ -123,11 +147,22 @@ for _ in $(seq 1 40); do
   kill -0 $SRV 2>/dev/null || break
 done
 
+SITE_OK=0
+if [ "$READY" = "1" ] && [ "$SITEPORT" != "$PORT" ]; then
+  for _ in $(seq 1 20); do
+    if command -v curl >/dev/null 2>&1 && curl -sf "http://127.0.0.1:$SITEPORT/api/v1/health" >/dev/null 2>&1; then
+      SITE_OK=1; break
+    fi
+    sleep 0.5
+  done
+  [ "$SITE_OK" = "1" ] || warn "⚠ Порт для браузера $SITEPORT не ответил — откройте сайт по адресу приложения или перезапустите."
+fi
+
 if [ "$READY" = "1" ]; then
   ok "✓ Сервер работает."
-  if [ -z "${NO_BROWSER:-}" ]; then
-    if command -v xdg-open >/dev/null 2>&1; then xdg-open "http://127.0.0.1:$PORT/" >/dev/null 2>&1 || true
-    elif command -v open >/dev/null 2>&1; then open "http://127.0.0.1:$PORT/" >/dev/null 2>&1 || true
+  if [ -z "${NO_BROWSER:-}" ] && { [ "$SITEPORT" = "$PORT" ] || [ "$SITE_OK" = "1" ]; }; then
+    if command -v xdg-open >/dev/null 2>&1; then xdg-open "http://127.0.0.1:$SITEPORT/" >/dev/null 2>&1 || true
+    elif command -v open >/dev/null 2>&1; then open "http://127.0.0.1:$SITEPORT/" >/dev/null 2>&1 || true
     fi
   fi
 else

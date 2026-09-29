@@ -10,7 +10,9 @@ const { app, BrowserWindow, Menu, Tray, shell, ipcMain, dialog, nativeImage, ses
 const path = require('path');
 const fs = require('fs');
 
-const DEFAULT_SERVER = 'http://45.90.45.92';   // адрес боевого сервера; меняется в «Настройки → Сервер»
+// Адрес боевого сервера (как в APK и на сайте: основной порт 6000). Меняется
+// пользователем в «Настройки → Сервер»; после смены применяется при входе.
+const DEFAULT_SERVER = 'http://45.90.45.92';
 let win = null;
 let tray = null;
 

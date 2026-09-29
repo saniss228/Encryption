@@ -1,4 +1,4 @@
-﻿# ============================================================================
+# ============================================================================
 #  Encryption — запуск мессенджера на Windows (сервер + сайт + API).
 #
 #  Что делает скрипт:
@@ -7,10 +7,15 @@
 #    3. запускает сервер и открывает сайт в браузере;
 #    4. показывает адрес для телефона в той же сети Wi-Fi.
 #
-#  Запуск:  START-ENCRYPTION-WINDOWS.cmd          (двойной клик, порт 8080)
-#           START-ENCRYPTION-WINDOWS.cmd 9000     (свой порт)
+#  Запуск:  START-ENCRYPTION-WINDOWS.cmd          (двойной клик)
+#           START-ENCRYPTION-WINDOWS.cmd 6000     (основной порт; 2-й аргумент — порт для браузера)
 #  Или напрямую из PowerShell:
-#           powershell -ExecutionPolicy Bypass -File tools\start-encryption.ps1 -Port 8080
+#           powershell -ExecutionPolicy Bypass -File tools\start-encryption.ps1
+#
+#  Порты: 6000 — приложения (ПК и Android) и API (как на сервере проекта);
+#         8080 — сайт в браузере на этом компьютере, потому что порт 6000
+#         Chrome/Edge блокируют как «небезопасный» (ERR_UNSAFE_PORT).
+#         Оба порта обслуживает один и тот же процесс — данные общие.
 #
 #  Остановка: Ctrl+C в окне либо просто закрыть окно.
 #
@@ -18,7 +23,8 @@
 # ============================================================================
 [CmdletBinding()]
 param(
-    [int]    $Port     = 8080,              # порт сайта; 6000 браузеры блокируют (ERR_UNSAFE_PORT)
+    [int]    $Port     = 6000,              # основной порт: приложения и API
+    [int]    $SitePort = 8080,              # порт для браузера (6000 браузеры блокируют)
     [string] $BindHost = '0.0.0.0',         # 0.0.0.0 — доступно и с телефона в этой же сети
     [switch] $NoBrowser,                    # не открывать браузер
     [switch] $NoInstall,                    # не проверять/ставить зависимости
@@ -173,35 +179,44 @@ if (-not $NoInstall) {
 # ── 4. Переменные окружения сервера ────────────────────────────────────────
 $env:ENC_HOST        = $BindHost
 $env:ENC_PORT        = "$Port"
+if ($SitePort -and $SitePort -ne $Port) { $env:ENC_ALT_PORTS = "$SitePort" } else { $env:ENC_ALT_PORTS = '' }
 $env:ENC_DATA_DIR    = $DataDir
 $env:ENC_WEB_DIR     = $WebDir
 $env:ENC_PUBLIC_IP   = '127.0.0.1'
 $env:ENC_ADMINS      = if ($env:ENC_ADMINS) { $env:ENC_ADMINS } else { 'saniss' }   # админ-панель
 if (-not (Test-Path $DataDir)) { New-Item -ItemType Directory -Path $DataDir | Out-Null }
 
-if ($Port -eq 6000) {
-    Warn '⚠ Порт 6000 браузеры блокируют (ERR_UNSAFE_PORT). Оставьте 8080 или укажите другой.'
+$hasSite = [bool]($SitePort -and $SitePort -ne $Port)
+if (-not $hasSite) {
+    Warn '⚠ Один порт и для приложений, и для браузера. Если это 6000 — сайт на этом компьютере в браузере не откроется.'
 }
 
-# ── 5. Проверяем, что порт свободен ────────────────────────────────────────
-$busy = $null
-try { $busy = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction Stop } catch { $busy = $null }
-if (-not $busy -and -not $IsWin) {
-    # Linux/macOS: проверяем порт через ss либо lsof
-    try {
-        if (Get-Command ss -ErrorAction SilentlyContinue) {
-            $busy = (ss -ltn 2>$null | Select-String ":$Port\s")
-        } elseif (Get-Command lsof -ErrorAction SilentlyContinue) {
-            $busy = (lsof -iTCP:$Port -sTCP:LISTEN 2>$null)
-        }
-    } catch { $busy = $null }
+# ── 5. Проверяем, что порты свободны ───────────────────────────────────────
+function Test-PortBusy([int] $p) {
+    $busy = $null
+    try { $busy = Get-NetTCPConnection -LocalPort $p -State Listen -ErrorAction Stop } catch { $busy = $null }
+    if (-not $busy -and -not $IsWin) {
+        # Linux/macOS: проверяем порт через ss либо lsof
+        try {
+            if (Get-Command ss -ErrorAction SilentlyContinue) {
+                $busy = (ss -ltn 2>$null | Select-String ":$p\s")
+            } elseif (Get-Command lsof -ErrorAction SilentlyContinue) {
+                $busy = (lsof -iTCP:$p -sTCP:LISTEN 2>$null)
+            }
+        } catch { $busy = $null }
+    }
+    return [bool]$busy
 }
-if ($busy) {
-    Bad "✗ Порт $Port уже занят (возможно, мессенджер уже запущен)."
-    Say "  Откройте http://127.0.0.1:$Port/ — или запустите скрипт с другим портом:"
-    Say "     START-ENCRYPTION-WINDOWS.cmd 8090"
-    Read-Host 'Нажмите Enter, чтобы закрыть'
-    exit 5
+$portsToCheck = @($Port)
+if ($hasSite) { $portsToCheck += $SitePort }
+foreach ($p in $portsToCheck) {
+    if (Test-PortBusy $p) {
+        Bad "✗ Порт $p уже занят (возможно, мессенджер уже запущен)."
+        Say "  Откройте http://127.0.0.1:$SitePort/ — или запустите с другими портами:"
+        Say "     START-ENCRYPTION-WINDOWS.cmd 6000 8080"
+        Read-Host 'Нажмите Enter, чтобы закрыть'
+        exit 5
+    }
 }
 
 # ── 6. Локальный и сетевой адреса ──────────────────────────────────────────
@@ -214,11 +229,13 @@ try {
 } catch { }
 
 Say ''
-Ok  '✓ Сервер запускается:'
-Say "    на этом компьютере:  http://127.0.0.1:$Port/"
-if ($lanIp) { Say "    с телефона (та же сеть Wi-Fi): http://${lanIp}:$Port/" }
-Say "    данные и файлы:      $DataDir"
-Say "    администратор:       $env:ENC_ADMINS  (раздел «Админ-панель» в настройках)"
+Ok  '✓ Сервер запускается.'
+Say "    сайт на этом компьютере:   http://127.0.0.1:$SitePort/"
+if ($lanIp) { Say "    сайт с телефона (Wi-Fi):   http://${lanIp}:$SitePort/" }
+if ($hasSite) { Say "    порт приложений и API:     $Port" }
+if ($lanIp) { Say "    адрес для приложения:      http://${lanIp}:$Port" }
+Say "    данные и файлы:            $DataDir"
+Say "    администратор:             $env:ENC_ADMINS  (раздел «Админ-панель» в настройках)"
 Say ''
 Say '  Остановка сервера — Ctrl+C в этом окне.'
 if ($lanIp) {
@@ -229,7 +246,7 @@ Say '═════════════════════════
 Say ''
 
 # ── 7. Запускаем сервер и открываем браузер ────────────────────────────────
-$url    = "http://127.0.0.1:$Port/"
+$url    = "http://127.0.0.1:$SitePort/"
 $logOut = Join-Path $DataDir 'server.log'
 $logErr = Join-Path $DataDir 'server-error.log'
 Remove-Item $logOut, $logErr -Force -ErrorAction SilentlyContinue
@@ -266,6 +283,20 @@ for ($i = 0; $i -lt 60; $i++) {
     } catch { }
 }
 
+$siteOk = $true
+if ($ready -and $hasSite) {
+    # Порт для браузера поднимается тем же процессом — даём ему пару секунд
+    $siteOk = $false
+    for ($i = 0; $i -lt 20; $i++) {
+        try {
+            $rS = Invoke-WebRequest "http://127.0.0.1:$SitePort/api/v1/health" -UseBasicParsing -TimeoutSec 2
+            if ($rS.StatusCode -eq 200) { $siteOk = $true; break }
+        } catch { }
+        Start-Sleep -Milliseconds 500
+    }
+    if (-not $siteOk) { Warn "⚠ Порт для браузера $SitePort не ответил — откройте сайт по адресу приложения." }
+}
+
 if (-not $ready) {
     Bad '✗ Сервер не запустился. Последние строки журнала:'
     foreach ($f in @($logErr, $logOut)) {
@@ -277,7 +308,7 @@ if (-not $ready) {
 }
 
 Ok '✓ Сервер работает.'
-if (-not $NoBrowser) {
+if (-not $NoBrowser -and $siteOk) {
     Say "→ Открываю $url"
     try { Start-Process $url } catch { }
 }
