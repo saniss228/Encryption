@@ -62,6 +62,14 @@
   Порт 6000 напрямую в браузере не используется — так его блокируют браузеры.
   Проверка: curl -s http://127.0.0.1:6000/api/v1/health
 
+  Обновление без распаковки архива (две команды в папке мессенджера):
+      Invoke-WebRequest -UseBasicParsing https://raw.githubusercontent.com/saniss228/Encryption/v3.2.3/tools/start-encryption.ps1 -OutFile tools\start-encryption.ps1
+      Invoke-WebRequest -UseBasicParsing https://raw.githubusercontent.com/saniss228/Encryption/v3.2.3/tools/lan-ip.ps1 -OutFile tools\lan-ip.ps1
+    Потом просто запустите ЗАПУСТИТЬ-МЕССЕНДЖЕР-WINDOWS.cmd заново.
+
+  Адрес для телефона показан в окне запуска («сайт с телефона (Wi-Fi)»). Если
+  определился неверно, укажите свой: ЗАПУСТИТЬ-МЕССЕНДЖЕР-WINDOWS.cmd 6000 8080 192.168.1.50
+
 ────────────────────────────────────────────────────────────────────────
  2. ПРИЛОЖЕНИЕ ДЛЯ ПК (Windows)     release/desktop/Encryption-3.2.3-win-x64-portable.exe
     (лежит внутри архива encryption-3.2.3-all.zip)

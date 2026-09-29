@@ -35,12 +35,17 @@ import sys
 
 root = pathlib.Path(sys.argv[1])
 ok = True
-ps1 = root / "tools/start-encryption.ps1"
-if ps1.read_bytes().startswith(b"\xef\xbb\xbf"):
-    print("  ✓ tools/start-encryption.ps1: UTF-8 с BOM")
-else:
-    print("  ✗ tools/start-encryption.ps1 без BOM — на Windows будет «кракозябры»")
+ps1_files = sorted(root.glob("tools/**/*.ps1"))
+if not ps1_files:
+    print("  ✗ не найдено ни одного .ps1")
     ok = False
+for ps1 in ps1_files:
+    rel = ps1.relative_to(root)
+    if ps1.read_bytes().startswith(b"\xef\xbb\xbf"):
+        print(f"  ✓ {rel}: UTF-8 с BOM")
+    else:
+        print(f"  ✗ {rel} без BOM — на Windows PowerShell 5.1 будет «кракозябры»")
+        ok = False
 for name in ("START-ENCRYPTION-WINDOWS.cmd", "ЗАПУСТИТЬ-МЕССЕНДЖЕР-WINDOWS.cmd"):
     raw = (root / name).read_bytes()
     if b"\r\n" in raw:
