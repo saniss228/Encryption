@@ -130,7 +130,7 @@ public class MainActivity extends Activity {
         public String getPlatform() { return "android"; }
 
         @JavascriptInterface
-        public String getAppVersion() { return "3.2.0"; }
+        public String getAppVersion() { return "3.2.1"; }
 
         @JavascriptInterface
         public void toast(String text) {

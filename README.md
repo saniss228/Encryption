@@ -1,6 +1,6 @@
 # 🔐 Encryption — защищённый мессенджер с двойным шифрованием
 
-**Версия 3.2.0.** Три клиента — **сайт**, **приложение для ПК** и **приложение для Android** —
+**Версия 3.2.1.** Три клиента — **сайт**, **приложение для ПК** и **приложение для Android** —
 на одном сервере с одним и тем же криптографическим ядром. Каждое сообщение шифруется
 **дважды**, файлы живут **ровно 24 часа** и **навсегда удаляются с сервера сразу после
 скачивания получателем** (в интерфейсе — метка **«Только локально / Local only»**),
@@ -25,14 +25,24 @@
 
 | Версия | Файл | Размер | Установка |
 |---|---|---|---|
-| 🎁 **Один архив со всем** | `release/encryption-3.2.0-all.zip` | ~73 МБ | сервер + сайт + ПК + Android + инструкция |
-| 🌐 **Сайт** | `web/` + сервер (`release/encryption-3.2.0-server-web.zip`) | ~1,5 МБ | запускается тем же сервером, открывать через nginx: `http://45.90.45.92/` |
-| 🖥 **ПК (Windows)** | `Encryption-3.2.0-win-x64-portable.exe` (внутри архива «всё в одном») | ~69 МБ | просто запустить, установка не нужна (portable) |
+| 🎁 **Один архив со всем** | `release/encryption-3.2.1-all.zip` | ~73 МБ | сервер + сайт + ПК + Android + инструкция |
+| 🌐 **Сайт** | `web/` + сервер (`release/encryption-3.2.1-server-web.zip`) | ~1,5 МБ | запускается тем же сервером, открывать через nginx: `http://45.90.45.92/` |
+| 🖥 **ПК (Windows)** | `Encryption-3.2.1-win-x64-portable.exe` (внутри архива «всё в одном») | ~69 МБ | просто запустить, установка не нужна (portable) |
 | 🐧 **ПК (Linux)** | собирается командой `npm run build:linux` | ~108 МБ | `chmod +x` и запустить |
-| 📱 **Android** | `release/android/Encryption-3.2.0.apk` | ~620 КБ | перекинуть на телефон и открыть (разрешить установку из неизвестных источников) |
+| 📱 **Android** | `release/android/Encryption-3.2.1.apk` | ~620 КБ | перекинуть на телефон и открыть (разрешить установку из неизвестных источников) |
 
 Все версии одним списком — на странице [**Releases**](https://github.com/saniss228/Encryption/releases):
-3.2.0 (сайт, ПК, Android) и предыдущие сборки 1.1.0 … 3.1.0.
+3.2.1 (сайт, ПК, Android) и предыдущие сборки 1.1.0 … 3.2.0.
+
+### Что нового в 3.2.1
+
+* **Запуск на Windows стал надёжным.** Сервер больше не запускается «заданием»
+  PowerShell: раньше каждая строка его журнала в PowerShell 5.1 превращалась
+  в ошибку (`NativeCommandError`), и скрипт падал, останавливая сервер сразу
+  после старта. Теперь сервер — отдельный процесс, его журнал пишется в файл
+  `data\server-error.log` и показывается в окне по мере появления.
+* Если сервер не поднялся или упал, скрипт показывает последние строки журнала
+  и не закрывает окно сам — причину видно сразу.
 
 ### Что нового в 3.2.0
 
@@ -63,7 +73,7 @@ sudo bash deploy/install.sh
 Скрипт поставит Python, nginx, systemd-службу и откроет порты. Проверка:
 
 ```bash
-curl -s http://127.0.0.1:6000/api/v1/health   # {"status":"ok","version":"3.2.0",...}
+curl -s http://127.0.0.1:6000/api/v1/health   # {"status":"ok","version":"3.2.1",...}
 ```
 
 Откройте `http://45.90.45.92/` — это сайт с мессенджером.
@@ -174,12 +184,12 @@ encryption/
 ```bash
 # Android APK (без Gradle: aapt2 → javac → d8 → zipalign → apksigner)
 bash tools/setup_toolchain.sh   # один раз: JDK 21 + Android SDK 34 → /opt/toolchain
-bash tools/build_apk.sh         # → release/android/Encryption-3.2.0.apk
+bash tools/build_apk.sh         # → release/android/Encryption-3.2.1.apk
 
 # Windows EXE (сборка на Linux требует 32-битный wine-префикс) и Linux AppImage
 cd desktop && npm install
-WINEPREFIX=/opt/toolchain/wine-prefix npm run build:win   # → release/desktop/Encryption-3.2.0-win-x64-portable.exe
-npm run build:linux                                       # → release/desktop/Encryption-3.2.0-linux-x64.AppImage
+WINEPREFIX=/opt/toolchain/wine-prefix npm run build:win   # → release/desktop/Encryption-3.2.1-win-x64-portable.exe
+npm run build:linux                                       # → release/desktop/Encryption-3.2.1-linux-x64.AppImage
 ```
 
 Ключ подписи APK создаётся автоматически (`android/keystore/encryption.keystore`,

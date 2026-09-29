@@ -83,7 +83,7 @@ MAX_MESSAGE_BYTES = int(os.getenv("ENC_MAX_MESSAGE_BYTES", str(64 * 1024)))
 GROUP_MAX_MEMBERS = int(os.getenv("ENC_GROUP_MAX", "200"))
 RECOVERY_WORDS = int(os.getenv("ENC_RECOVERY_WORDS", "24"))   # BIP39-фраза
 
-VERSION = "3.2.0"      # выбор сервера и перенос данных, резервные копии, шифрование без изменений
+VERSION = "3.2.1"      # надёжный запуск на Windows (без заданий PowerShell)
 
 # ── Администрирование ───────────────────────────────────────────────────────
 # Логины, получающие админ-права (панель управления сервером).

@@ -38,7 +38,7 @@ function createWindow() {
     minHeight: 520,
     title: 'Encryption',
     backgroundColor: '#0b1020',
-    icon: path.join(__dirname, 'build', 'icon.png'),
+    icon: path.join(__dirname, 'assets', 'icon.png'),
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),

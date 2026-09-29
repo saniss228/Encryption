@@ -228,31 +228,50 @@ if ($lanIp) {
 Say '══════════════════════════════════════════════════════════════════════'
 Say ''
 
-# ── 7. Ждём готовности сервера и открываем браузер ─────────────────────────
-$url = "http://127.0.0.1:$Port/"
-$job = Start-Job -ScriptBlock {
-    param($py, $root)
-    Set-Location $root
-    # Пишем журнал сервера в обычный поток вывода: иначе PowerShell 5.1
-    # превращает каждую строку INFO в «ошибку» и скрипт падает.
-    $ErrorActionPreference = 'Continue'
-    & $py '-m' 'server.app' 2>&1
-} -ArgumentList $VenvPy, $Root
+# ── 7. Запускаем сервер и открываем браузер ────────────────────────────────
+$url    = "http://127.0.0.1:$Port/"
+$logOut = Join-Path $DataDir 'server.log'
+$logErr = Join-Path $DataDir 'server-error.log'
+Remove-Item $logOut, $logErr -Force -ErrorAction SilentlyContinue
+
+# Сервер запускается ОТДЕЛЬНЫМ процессом, а весь его вывод пишется в файлы.
+# Раньше сервер запускался заданием PowerShell (Start-Job), и в PowerShell 5.1
+# каждая строка журнала («INFO: Started server process…») превращалась в
+# NativeCommandError — скрипт падал и останавливал сервер сразу после старта.
+# Теперь ошибка невозможна: в консоль попадает только прочитанный текст.
+try {
+    $spArgs = @{
+        FilePath               = $VenvPy
+        ArgumentList           = @('-m', 'server.app')
+        WorkingDirectory       = $Root
+        PassThru               = $true
+        RedirectStandardOutput = $logOut
+        RedirectStandardError  = $logErr
+    }
+    if ($IsWin) { $spArgs['NoNewWindow'] = $true }   # на Windows — без второго окна
+    $proc = Start-Process @spArgs
+} catch {
+    Bad "✗ Не удалось запустить сервер: $($_.Exception.Message)"
+    Read-Host 'Нажмите Enter, чтобы закрыть'
+    exit 6
+}
 
 $ready = $false
 for ($i = 0; $i -lt 60; $i++) {
     Start-Sleep -Milliseconds 500
+    if ($proc.HasExited) { break }
     try {
         $r = Invoke-WebRequest "http://127.0.0.1:$Port/api/v1/health" -UseBasicParsing -TimeoutSec 2
         if ($r.StatusCode -eq 200) { $ready = $true; break }
     } catch { }
-    if ($job.State -eq 'Failed' -or $job.State -eq 'Completed') { break }
 }
 
 if (-not $ready) {
-    Bad '✗ Сервер не запустился. Вывод:'
-    Receive-Job $job | ForEach-Object { Say "    $_" }
-    Remove-Job $job -Force
+    Bad '✗ Сервер не запустился. Последние строки журнала:'
+    foreach ($f in @($logErr, $logOut)) {
+        if (Test-Path $f) { Get-Content $f -Tail 25 -ErrorAction SilentlyContinue | ForEach-Object { Say "    $_" } }
+    }
+    if (-not $proc.HasExited) { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue }
     Read-Host 'Нажмите Enter, чтобы закрыть'
     exit 6
 }
@@ -263,28 +282,37 @@ if (-not $NoBrowser) {
     try { Start-Process $url } catch { }
 }
 Say ''
-Say 'Это окно можно свернуть — мессенджер работает, пока оно открыто.'
+Say "  Журнал сервера: $logErr"
+Say '  Это окно можно свернуть — мессенджер работает, пока оно открыто.'
 Say ''
 
-# Показываем вывод сервера «в живую» и ждём Ctrl+C
+# Показываем новые строки журнала по мере появления и ждём закрытия сервера
+$posMap = @{}
+foreach ($f in @($logErr, $logOut)) { $posMap[$f] = 0 }
 try {
-    while ($true) {
-        # -ErrorAction Continue: строки журнала сервера не должны прерывать цикл
-        Receive-Job $job -ErrorAction Continue -ErrorVariable jobErr 2>$null | ForEach-Object {
-            if ($_ -is [System.Management.Automation.ErrorRecord]) { Write-Host "$_" -ForegroundColor DarkGray }
-            else { Write-Host $_ }
+    while (-not $proc.HasExited) {
+        Start-Sleep -Milliseconds 600
+        foreach ($f in @($logErr, $logOut)) {
+            if (-not (Test-Path $f)) { continue }
+            $txt = $null
+            try { $txt = [System.IO.File]::ReadAllText($f) } catch { continue }
+            if (-not $txt) { continue }
+            $seen = [int]$posMap[$f]
+            if ($txt.Length -gt $seen) {
+                Write-Host $txt.Substring($seen)
+                $posMap[$f] = $txt.Length
+            }
         }
-        if ($job.State -eq 'Completed' -or $job.State -eq 'Failed') { break }
-        Start-Sleep -Milliseconds 700
     }
-    if ($job.State -eq 'Failed') {
-        Warn '⚠ Сервер остановился с ошибкой. Вывод выше.'
-        Read-Host 'Нажмите Enter, чтобы закрыть'
-    }
+    Warn '⚠ Сервер завершился. Последние строки журнала:'
+    if (Test-Path $logErr) { Get-Content $logErr -Tail 15 -ErrorAction SilentlyContinue | ForEach-Object { Say "    $_" } }
+    Read-Host 'Нажмите Enter, чтобы закрыть'
 } finally {
-    Say ''
-    Say 'Останавливаю сервер…'
-    Stop-Job $job -ErrorAction SilentlyContinue
-    Remove-Job $job -Force -ErrorAction SilentlyContinue
-    Ok '✓ Сервер остановлен.'
+    if ($proc -and -not $proc.HasExited) {
+        Say ''
+        Say 'Останавливаю сервер…'
+        Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Milliseconds 400
+        Ok '✓ Сервер остановлен.'
+    }
 }
