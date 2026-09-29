@@ -20,8 +20,6 @@ PORT="${ENC_TEST_PORT:-8031}"
 export ENC_BASE="http://127.0.0.1:$PORT"
 DATA="$(mktemp -d)"
 PASS=0; FAIL=0
-# Тестам второй порт (для браузера) не нужен: сервер слушает только свой порт.
-export ENC_ALT_PORTS=""
 
 echo "══════ 1/7 Криптографическое ядро и файлы запуска ══════"
 CORE_OK=1
@@ -63,12 +61,30 @@ places = {
     "tools/start-server.sh": "${ENC_ADMINS:-saness}",
     "deploy/encryption.service": "ENC_ADMINS=saness",
 }
+places["tools/start-server.sh"] = "${ENC_ADMINS:-saness}"
 for name, needle in places.items():
     text = (root / name).read_text(encoding="utf-8", errors="replace")
     if needle in text:
         print(f"  ✓ {name}: администратор по умолчанию — {expected}")
     else:
         print(f"  ✗ {name}: не найден администратор по умолчанию {expected} ({needle})")
+        ok = False
+# Единый порт 3000 у сервера и файлов запуска (клиенты собираются с тем же адресом)
+port_places = {
+    "server/config.py": 'os.getenv("ENC_PORT", "3000")',
+    "tools/start-encryption.ps1": "$Port     = 3000",
+    "tools/start-server.sh": "${PORT:-3000}",
+    "deploy/encryption.service": "ENC_PORT=3000",
+    "deploy/nginx-encryption.conf": "127.0.0.1:3000",
+    "web/js/app.js": "http://45.90.45.92:3000",
+    "desktop/main.js": "http://45.90.45.92:3000",
+}
+for name, needle in port_places.items():
+    text = (root / name).read_text(encoding="utf-8", errors="replace")
+    if needle in text:
+        print(f"  ✓ {name}: порт 3000")
+    else:
+        print(f"  ✗ {name}: не найден порт 3000 ({needle})")
         ok = False
 sys.exit(0 if ok else 1)
 PYEOF
@@ -85,26 +101,13 @@ if [ "$CORE_OK" = "1" ]; then PASS=$((PASS+1)); else FAIL=$((FAIL+1)); fi
 
 echo
 echo "══════ 2/7 API end-to-end (тестовый сервер на :$PORT) ══════"
-# Второй порт (для браузера) проверяем на живом сервере: 6000 браузеры блокируют,
-# поэтому сервер слушает ещё один порт — здесь это $PORT+1.
-ALT=$((PORT + 1))
-ENC_PORT="$PORT" ENC_ALT_PORTS="$ALT" ENC_DATA_DIR="$DATA" python3 -m server.app >"$DATA/server.log" 2>&1 &
+ENC_PORT="$PORT" ENC_DATA_DIR="$DATA" python3 -m server.app >"$DATA/server.log" 2>&1 &
 SRV=$!
 trap 'kill $SRV 2>/dev/null' EXIT
 for i in $(seq 1 30); do
   curl -sf "$ENC_BASE/api/v1/health" >/dev/null && break
   sleep 1
 done
-SITE_OK=0
-for i in $(seq 1 20); do
-  curl -sf "http://127.0.0.1:$ALT/api/v1/health" >/dev/null && { SITE_OK=1; break; }
-  sleep 1
-done
-if [ "$SITE_OK" = "1" ]; then
-  echo "  ✓ второй порт для браузера отвечает: http://127.0.0.1:$ALT/api/v1/health"
-else
-  echo "  ✗ второй порт $ALT не отвечает"; FAIL=$((FAIL+1))
-fi
 if node "$ROOT/tools/tests/test_api_e2e.mjs"; then PASS=$((PASS+1)); else FAIL=$((FAIL+1)); fi
 
 echo

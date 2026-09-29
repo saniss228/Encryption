@@ -2,10 +2,8 @@
 title Encryption - messenger server
 cd /d "%~dp0"
 set PORT=%~1
-if "%PORT%"=="" set PORT=6000
-set SITEPORT=%~2
-if "%SITEPORT%"=="" set SITEPORT=8080
-set LANIP=%~3
+if "%PORT%"=="" set PORT=3000
+set LANIP=%~2
 set LANARG=
 if not "%LANIP%"=="" set LANARG=-LanIp %LANIP%
 where powershell >nul 2>nul
@@ -14,5 +12,5 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\start-encryption.ps1" -Port %PORT% -SitePort %SITEPORT% %LANARG%
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\start-encryption.ps1" -Port %PORT% %LANARG%
 if errorlevel 1 pause

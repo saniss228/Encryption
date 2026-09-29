@@ -45,7 +45,7 @@ public class MainActivity extends Activity {
     private WebView web;
     private SharedPreferences prefs;
     private ValueCallback<Uri[]> filePathCallback;
-    private static final String DEFAULT_SERVER = "http://45.90.45.92"; // nginx → 127.0.0.1:6000
+    private static final String DEFAULT_SERVER = "http://45.90.45.92:3000"; // порт сервера и приложений
     private static final int FILE_CHOOSER = 1001;
 
     @SuppressLint({"SetJavaScriptEnabled", "AddJavascriptInterface"})
@@ -130,7 +130,7 @@ public class MainActivity extends Activity {
         public String getPlatform() { return "android"; }
 
         @JavascriptInterface
-        public String getAppVersion() { return "3.2.3"; }
+        public String getAppVersion() { return "3.3.0"; }
 
         @JavascriptInterface
         public void toast(String text) {

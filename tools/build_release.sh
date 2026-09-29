@@ -101,9 +101,9 @@ Encryption ${VERSION} — что в архиве
 
 ЗАПУСК ОДНОЙ КОМАНДОЙ
   ЗАПУСТИТЬ-МЕССЕНДЖЕР-WINDOWS.cmd   Windows: двойной клик — окружение, запуск, браузер
-  START-ENCRYPTION-WINDOWS.cmd       то же самое латиницей (порты по умолчанию: 6000 и 8080)
-  tools/start-encryption.ps1         PowerShell: -Port 6000 -SitePort 8080 -BindHost -NoBrowser -Reinstall
-  tools/start-server.sh              Linux/macOS: bash tools/start-server.sh [порт_приложений] [порт_браузера]
+  START-ENCRYPTION-WINDOWS.cmd       то же самое латиницей (порт по умолчанию 3000)
+  tools/start-encryption.ps1         PowerShell: -Port 3000 -LanIp -BindHost -NoBrowser -Reinstall
+  tools/start-server.sh              Linux/macOS: bash tools/start-server.sh [порт]
 
 ПЕРЕНОС ДАННЫХ НА ДРУГОЙ СЕРВЕР
   Настройки → Админ-панель → «Данные и перенос» → «Скачать копию данных»

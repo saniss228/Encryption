@@ -21,17 +21,11 @@ for _d in (DATA_DIR, FILES_DIR, MEDIA_DIR, LOG_DIR):
     _d.mkdir(parents=True, exist_ok=True)
 
 # ── Сеть ────────────────────────────────────────────────────────────────────
-# Белый IP пользователя. Порт 6000 — сайт + API + WebSocket на одном порту:
-# к нему подключаются приложения (ПК и Android) и сайт через nginx.
+# Белый IP пользователя. Порт 3000 — сайт + API + WebSocket на одном порту:
+# к нему подключаются приложения (ПК и Android), сайт в браузере и nginx.
+# Порт 3000 браузеры не блокируют, поэтому отдельный «безопасный» порт не нужен.
 HOST = os.getenv("ENC_HOST", "0.0.0.0")
-PORT = int(os.getenv("ENC_PORT", "6000"))
-# Второй порт — только для браузера на том же компьютере: Chrome/Edge/Firefox
-# считают 6000 небезопасным (ERR_UNSAFE_PORT) и сайт на нём не открывают.
-# Сервер слушает оба порта одним процессом: приложения идут на 6000 (как на
-# сервере проекта), а браузер локально открывает обычный порт 8080.
-# Список задаётся через запятую: ENC_ALT_PORTS=8080,8000 (пусто — выключено).
-ALT_PORTS = [int(p) for p in os.getenv("ENC_ALT_PORTS", "8080").replace(" ", "").split(",")
-             if p.isdigit()]
+PORT = int(os.getenv("ENC_PORT", "3000"))
 PUBLIC_IP = os.getenv("ENC_PUBLIC_IP", "45.90.45.92")
 PUBLIC_ORIGIN = os.getenv("ENC_PUBLIC_ORIGIN", f"http://{PUBLIC_IP}:{PORT}")
 
@@ -46,16 +40,13 @@ TRUSTED_PROXY_IPS = set(filter(None, os.getenv("ENC_TRUSTED_PROXIES", "").split(
 ALLOWED_ORIGINS = [o for o in os.getenv("ENC_ALLOWED_ORIGINS", "").split(",") if o] or [
     PUBLIC_ORIGIN,
     f"https://{PUBLIC_IP}:{PORT}",
+    # Сайт, отданный через nginx (порт 80/443) — тот же сервер, другой источник
+    f"http://{PUBLIC_IP}",
+    f"https://{PUBLIC_IP}",
     f"http://localhost:{PORT}",
     f"http://127.0.0.1:{PORT}",
     "null",
 ]
-# Локальные адреса дополнительных портов: браузер на этом же компьютере
-# открывает сайт на них, значит их Origin должен быть разрешён.
-for _p in ALT_PORTS:
-    for _o in (f"http://localhost:{_p}", f"http://127.0.0.1:{_p}"):
-        if _o not in ALLOWED_ORIGINS:
-            ALLOWED_ORIGINS.append(_o)
 # Разрешаем локальные адреса и локальные оболочки приложений (Origin как у file:///WebView)
 ALLOWED_ORIGIN_REGEX = os.getenv(
     "ENC_ALLOWED_ORIGIN_REGEX",
@@ -97,7 +88,7 @@ MAX_MESSAGE_BYTES = int(os.getenv("ENC_MAX_MESSAGE_BYTES", str(64 * 1024)))
 GROUP_MAX_MEMBERS = int(os.getenv("ENC_GROUP_MAX", "200"))
 RECOVERY_WORDS = int(os.getenv("ENC_RECOVERY_WORDS", "24"))   # BIP39-фраза
 
-VERSION = "3.2.3"      # надёжный запуск на Windows (без заданий PowerShell)
+VERSION = "3.3.0"      # единый порт 3000 для сервера и всех клиентов
 
 # ── Администрирование ───────────────────────────────────────────────────────
 # Логины, получающие админ-права (панель управления сервером).

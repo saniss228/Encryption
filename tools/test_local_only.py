@@ -6,7 +6,7 @@
 файл помечен local_only, метаданные и сообщение это отражают → повторная попытка
 скачать файл отвечает 410 LOCAL_ONLY.
 
-Запуск:  python3 tools/test_local_only.py [http://127.0.0.1:6000]
+Запуск:  python3 tools/test_local_only.py [http://127.0.0.1:3000]
 """
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ import time
 import urllib.error
 import urllib.request
 
-BASE = (sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:6000").rstrip("/")
+BASE = (sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:3000").rstrip("/")
 SUF = secrets.token_hex(3)
 OK, FAIL = [], []
 

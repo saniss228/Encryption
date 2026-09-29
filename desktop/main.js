@@ -10,17 +10,31 @@ const { app, BrowserWindow, Menu, Tray, shell, ipcMain, dialog, nativeImage, ses
 const path = require('path');
 const fs = require('fs');
 
-// Адрес боевого сервера (как в APK и на сайте: основной порт 6000). Меняется
+// Адрес боевого сервера (как в APK и на сайте: порт 3000). Меняется
 // пользователем в «Настройки → Сервер»; после смены применяется при входе.
-const DEFAULT_SERVER = 'http://45.90.45.92';
+const DEFAULT_SERVER = 'http://45.90.45.92:3000';
 let win = null;
 let tray = null;
 
 /* ── Конфиг приложения (адрес сервера, настройки окна) ───────────────────── */
 const configPath = () => path.join(app.getPath('userData'), 'config.json');
+// Адрес, сохранённый до перехода на порт 3000 (6000 или 8080), переводим на 3000
+function toCurrentPort(url) {
+  try {
+    const u = new URL(url);
+    if (u.port === '6000' || u.port === '8080') return u.protocol + '//' + u.hostname + ':3000';
+  } catch (e) { /* не адрес — оставляем как есть */ }
+  return '';
+}
 function readConfig() {
-  try { return JSON.parse(fs.readFileSync(configPath(), 'utf8')); }
-  catch (e) { return {}; }
+  try {
+    const cfg = JSON.parse(fs.readFileSync(configPath(), 'utf8'));
+    if (cfg && cfg.serverUrl) {
+      const fixed = toCurrentPort(cfg.serverUrl);
+      if (fixed) { cfg.serverUrl = fixed; writeConfig({ serverUrl: fixed }); }
+    }
+    return cfg || {};
+  } catch (e) { return {}; }
 }
 function writeConfig(patch) {
   const cfg = Object.assign(readConfig(), patch);

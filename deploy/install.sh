@@ -6,14 +6,14 @@
 #  Что делает:
 #    1) ставит Python, nginx, ufw
 #    2) копирует проект в /opt/encryption и создаёт venv
-#    3) ставит systemd-службу (порт 6000 — внутренний)
-#    4) настраивает nginx на 80 порт → 6000 (браузеры блокируют прямой :6000!)
+#    3) ставит systemd-службу (порт 3000)
+#    4) настраивает nginx на 80 порт → 3000 (сайт в браузере)
 #    5) открывает 80/443 в файрволе
 # ============================================================================
 set -euo pipefail
 
 PUBLIC_IP="${ENC_PUBLIC_IP:-45.90.45.92}"
-BACKEND_PORT="${ENC_PORT:-6000}"
+BACKEND_PORT="${ENC_PORT:-3000}"
 SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DST_DIR="/opt/encryption"
 
@@ -59,8 +59,8 @@ echo "▶ 6/6 Файрвол…"
 ufw allow 22/tcp >/dev/null 2>&1 || true
 ufw allow 80/tcp >/dev/null 2>&1 || true
 ufw allow 443/tcp >/dev/null 2>&1 || true
-# Прямой доступ к 6000 оставляем только локальным (nginx уже внутри)
-ufw deny 6000/tcp >/dev/null 2>&1 || true
+# Порт 3000 открываем и снаружи: к нему напрямую подключаются приложения (ПК и Android)
+ufw allow 3000/tcp >/dev/null 2>&1 || true
 ufw --force enable >/dev/null 2>&1 || true
 
 cat <<EOF
@@ -69,8 +69,8 @@ cat <<EOF
  Готово! Мессенджер Encryption развёрнут.
 
  Сайт с мессенджером:  http://$PUBLIC_IP/            ← открывайте так
- Внутренний бэкенд:    http://127.0.0.1:$BACKEND_PORT  (прямо не открывать:
-                       браузеры блокируют порт 6000 как небезопасный)
+ Бэкенд:               http://127.0.0.1:$BACKEND_PORT  (порт открыт и наружу:
+                       к нему напрямую подключаются приложения)
 
  Проверка:  curl -s http://127.0.0.1:$BACKEND_PORT/api/v1/health
  Логи:      journalctl -u encryption -f

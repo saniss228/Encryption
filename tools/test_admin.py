@@ -6,7 +6,7 @@
 блокировку и разблокировку, принудительный выход, рассылку объявлений,
 закрытие регистрации, уборку файлов, журнал и удаление аккаунта.
 
-Запуск:  python3 tools/test_admin.py [http://127.0.0.1:6000]
+Запуск:  python3 tools/test_admin.py [http://127.0.0.1:3000]
 """
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ import sys
 import urllib.error
 import urllib.request
 
-BASE = (sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:6000").rstrip("/")
+BASE = (sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:3000").rstrip("/")
 SUF = secrets.token_hex(3)
 OK: list[str] = []
 FAIL: list[str] = []

@@ -15,6 +15,13 @@ OUT="$ROOT/release/android"
 APP_VERSION="$(grep -oP 'VERSION = "\K[0-9.]+' "$ROOT/server/config.py" | head -1)"
 APP_VERSION="${APP_VERSION:-3.2.0}"
 VERSION_CODE="$(printf '%s' "$APP_VERSION" | awk -F. '{printf "%d", $1*10000 + $2*100 + $3}')"
+
+# Версия в AndroidManifest.xml должна совпадать с версией релиза: aapt2 подставляет
+# --version-name/--version-code только тогда, когда значения не заданы в манифесте.
+MANIFEST="$ROOT/android/AndroidManifest.xml"
+if [ -f "$MANIFEST" ]; then
+  sed -i -E "s/(android:versionCode=\")[0-9]+(\")/\1${VERSION_CODE}\2/; s/(android:versionName=\")[0-9.]+(\")/\1${APP_VERSION}\2/" "$MANIFEST"
+fi
 BUILD="$AND/build"
 
 # ── Пути к инструментам ───────────────────────────────────────────────────
