@@ -1,7 +1,7 @@
 {
   "name": "encryption-desktop",
   "productName": "Encryption",
-  "version": "3.4.0",
+  "version": "3.4.1",
   "description": "Encryption — защищённый мессенджер с двойным шифрованием (AES-256-GCM + RSA-4096-OAEP)",
   "author": "Encryption",
   "license": "MIT",

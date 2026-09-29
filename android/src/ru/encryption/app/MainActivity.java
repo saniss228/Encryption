@@ -1,7 +1,9 @@
 package ru.encryption.app;
 
+import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.content.pm.PackageManager;
 import android.app.DownloadManager;
 import android.content.Context;
 import android.content.Intent;
@@ -10,6 +12,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.util.Log;
 import android.view.KeyEvent;
 import android.view.View;
 import android.webkit.ConsoleMessage;
@@ -47,6 +50,10 @@ public class MainActivity extends Activity {
     private ValueCallback<Uri[]> filePathCallback;
     private static final String DEFAULT_SERVER = "http://45.90.45.92:3000"; // порт сервера и приложений
     private static final int FILE_CHOOSER = 1001;
+    private static final int REQ_MEDIA = 1002;      // микрофон/камера для звонков
+
+    // Запрос WebView (getUserMedia) ждёт, пока пользователь разрешит доступ в системе
+    private PermissionRequest pendingMediaRequest;
 
     @SuppressLint({"SetJavaScriptEnabled", "AddJavascriptInterface"})
     @Override
@@ -95,8 +102,11 @@ public class MainActivity extends Activity {
         web.setWebChromeClient(new WebChromeClient() {
             @Override
             public void onPermissionRequest(final PermissionRequest request) {
-                // Микрофон/камера нужны для звонков — выдаём разрешение самому приложению
-                runOnUiThread(() -> request.grant(request.getResources()));
+                // Микрофон/камера нужны для звонков и голосовых сообщений.
+                // Мало разрешить запрос WebView: Android требует ещё системное
+                // разрешение приложения — иначе доступ молча не выдаётся
+                // (именно из-за этого на телефоне «не было микрофона»).
+                runOnUiThread(() -> grantMedia(request));
             }
 
             @Override
@@ -108,12 +118,89 @@ public class MainActivity extends Activity {
             }
 
             @Override
-            public boolean onConsoleMessage(ConsoleMessage cm) { return true; }
+            public boolean onConsoleMessage(ConsoleMessage cm) {
+                // Сообщения клиента идут в системный журнал Android —
+                // его видно через «adb logcat -s EncryptionJS» без отладки страницы
+                Log.d("EncryptionJS", cm.messageLevel() + ": " + cm.message()
+                        + " (" + cm.sourceId() + ":" + cm.lineNumber() + ")");
+                return true;
+            }
         });
+
+        askMediaPermissionsOnStart();
 
         String url = "file:///android_asset/www/index.html?server="
                 + Uri.encode(prefs.getString("server", DEFAULT_SERVER));
         web.loadUrl(url);
+    }
+
+    /* ── Разрешения для звонков и голосовых сообщений ───────────────────── */
+
+    /**
+     * Спрашиваем микрофон, камеру и уведомления при запуске: без системного
+     * разрешения запись голосового и звонок не начнутся, а пользователь
+     * увидит лишь невнятную ошибку. Спрашиваем только то, что ещё не выдано.
+     */
+    private void askMediaPermissionsOnStart() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return;
+        java.util.List<String> need = new java.util.ArrayList<>();
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            need.add(Manifest.permission.RECORD_AUDIO);
+        }
+        if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            need.add(Manifest.permission.CAMERA);
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+                && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            need.add(Manifest.permission.POST_NOTIFICATIONS);
+        }
+        if (!need.isEmpty()) {
+            requestPermissions(need.toArray(new String[0]), REQ_MEDIA);
+        }
+    }
+
+    /** Какие системные разрешения нужны для запроса WebView. */
+    private String[] neededPermissions(PermissionRequest request) {
+        java.util.List<String> need = new java.util.ArrayList<>();
+        for (String res : request.getResources()) {
+            if (PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(res)
+                    && checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                need.add(Manifest.permission.RECORD_AUDIO);
+            }
+            if (PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(res)
+                    && checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+                need.add(Manifest.permission.CAMERA);
+            }
+        }
+        return need.toArray(new String[0]);
+    }
+
+    /** Выдать запрос WebView, если системные разрешения уже есть; иначе — спросить. */
+    private void grantMedia(PermissionRequest request) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+            request.grant(request.getResources());
+            return;
+        }
+        String[] need = neededPermissions(request);
+        if (need.length == 0) {
+            request.grant(request.getResources());
+            return;
+        }
+        pendingMediaRequest = request;                 // выдадим после ответа пользователя
+        requestPermissions(need, REQ_MEDIA);
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int code, String[] permissions, int[] results) {
+        super.onRequestPermissionsResult(code, permissions, results);
+        if (code != REQ_MEDIA || pendingMediaRequest == null) return;
+        PermissionRequest request = pendingMediaRequest;
+        pendingMediaRequest = null;
+        if (neededPermissions(request).length == 0) {
+            request.grant(request.getResources());     // всё разрешено — звонок/запись начинается
+        } else {
+            request.deny();                            // пользователь отказал — веб-клиент скажет об этом
+        }
     }
 
     /** Мост «нативная часть ↔ веб-клиент». */
@@ -130,7 +217,7 @@ public class MainActivity extends Activity {
         public String getPlatform() { return "android"; }
 
         @JavascriptInterface
-        public String getAppVersion() { return "3.4.0"; }
+        public String getAppVersion() { return "3.4.1"; }
 
         @JavascriptInterface
         public void toast(String text) {

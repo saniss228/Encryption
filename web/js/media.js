@@ -57,7 +57,13 @@
       return new Blob(parts, { type: att.mime || 'application/octet-stream' });
     })();
     cache.set(att.file_id, task);
-    task.catch(() => cache.delete(att.file_id));
+    task.then(
+      (blob) => { if (window.Log) window.Log.debug('media', 'вложение скачано и расшифровано', { файл: att.file_id, мс_байт: blob.size }); },
+      (e) => {
+        cache.delete(att.file_id);
+        if (window.Log) window.Log.error('media', 'вложение не удалось получить', e, { файл: att.file_id, вид: att.kind });
+      },
+    );
     return task;
   };
 
@@ -175,6 +181,7 @@
       if (msgEl) msgEl.classList.add('local');
       M.showLocalBadge(el, m);
     } catch (e) {
+      if (window.Log) window.Log.warn('media', 'показ вложения не удался', { код: e && e.code, файл: att.file_id });
       if (loader) loader.innerHTML = esc(e && e.code === 'LOCAL_ONLY' ? T('file.localOnlyBadge') : T('file.loadError'));
       if (e && e.code === 'LOCAL_ONLY') { att.localOnly = true; m.localOnly = true; M.showLocalBadge(el, m); }
     }
@@ -264,6 +271,7 @@
         if (!m.out) { await M.markConsumed(m, att, true); M.showLocalBadge(el, m); }
       } catch (err) {
         btn.textContent = '▶';
+        if (window.Log) window.Log.error('media', 'голосовое не воспроизвелось', err, { файл: att.file_id });
         UI.toast(err && err.code === 'LOCAL_ONLY' ? T('file.localOnlyNote') : ((err && err.message) || T('file.loadError')), 'err', 5000);
       }
     };

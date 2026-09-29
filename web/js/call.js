@@ -64,6 +64,7 @@
         this.callId = res.call_id;
         if (res.ice_servers) this.iceServers = res.ice_servers;
       } catch (e) {
+        if (window.Log) window.Log.warn('call', 'сервер не разрешил звонок', { код: e && e.code, сообщение: e && e.message });
         // Пользователь заблокирован — сервер отказывает ещё до звонка
         if (e && e.code === 'BLOCKED') return toast(T('call.needFriends'), 'err', 6000);
         this.callId = 'local-' + Date.now();
@@ -85,6 +86,7 @@
       this.kind = ev.kind || 'audio';
       this.waiting = true;
       this.mediaReady = false;
+      if (window.Log) window.Log.info('call', 'входящий звонок', { id: ev.call_id, вид: ev.kind, от: ev.from });
       const chat = App.chatsById[ev.chat_id] || {};
       const peer = (chat.members || []).find((m) => m.id === ev.from) || {};
       this.show({
@@ -99,6 +101,7 @@
     async accept() {
       const App = global.App;
       if (!this.callId) return;
+      if (window.Log) window.Log.info('call', 'звонок принят', { id: this.callId });
       this.waiting = false;
       this.mediaReady = true;
       $('callIncomingActions').classList.add('hidden');
@@ -115,6 +118,7 @@
     /* ── Кнопка «Отклонить» ──────────────────────────────────────────────── */
     decline() {
       const App = global.App;
+      if (window.Log) window.Log.info('call', 'звонок отклонён', { id: this.callId });
       if (!this.callId) return this.cleanup();
       App.api.sendRaw({ t: 'call.signal', to: this.peerId, call_id: this.callId, signal: 'decline' });
       try { App.api.patch('/api/v1/calls/' + this.callId, { state: 'declined' }).catch(() => {}); } catch (e) {}
@@ -177,6 +181,9 @@
     async prepareMedia(video) {
       if (this.localStream) return;
       try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          throw Object.assign(new Error(T('call.noMic')), { code: 'NO_MEDIA_API' });
+        }
         this.localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: !!video });
       } catch (e) {
         try { this.localStream = await navigator.mediaDevices.getUserMedia({ audio: true }); }

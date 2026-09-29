@@ -164,6 +164,74 @@
     if (e.target && e.target.id === 'modalBackdrop') closeModal();
   });
 
-  global.UI = { $, qs, qsa, esc, toast, modal, closeModal, confirmDialog, avatarHTML, fillAvatar,
+  /**
+   * Лист действий снизу — то, что открывается долгим нажатием на телефоне.
+   * Кнопки крупные: пальцем попадать легко. Пункт может быть { key, icon,
+   * label, danger, run } или null (тогда он скрыт).
+   */
+  function sheet(title, items) {
+    const list = (items || []).filter(Boolean);
+    if (!list.length) return;
+    const rows = list.map((it) =>
+      `<button class="sheet-row${it.danger ? ' danger' : ''}" data-sheet="${esc(it.key)}">
+         <span class="sheet-ico">${it.icon || ''}</span><span class="sheet-label">${esc(it.label)}</span></button>`).join('');
+    modal(title, `<div class="sheet">${rows}
+      <button class="sheet-row cancel" data-sheet="__cancel">${esc(t('common.cancel'))}</button></div>`, { actions: false });
+    const body = $('modalBody');
+    body.querySelectorAll('[data-sheet]').forEach((b) => {
+      b.onclick = async () => {
+        const key = b.dataset.sheet;
+        closeModal();
+        if (key === '__cancel') return;
+        const it = list.find((x) => String(x.key) === key);
+        if (it && it.run) { try { await it.run(); } catch (e) { toast((e && e.message) || t('conn.error'), 'err'); } }
+      };
+    });
+  }
+
+  // Момент последнего сработавшего долгого нажатия: сразу после него система
+  // присылает «обычное» касание-клик по тем же координатам. Оно попадает на
+  // подложку окна и мгновенно закрывает только что открытое меню — поэтому
+  // такой клик глушим (на телефоне это ровно то поведение, которого ждут).
+  let suppressClickUntil = 0;
+  document.addEventListener('click', (e) => {
+    if (Date.now() < suppressClickUntil) { e.stopPropagation(); e.preventDefault(); }
+  }, true);
+
+  /** Долгое нажатие (телефон) и правая кнопка мыши: открыть действия. */
+  function onLongPress(el, handler, ms) {
+    if (!el || typeof handler !== 'function') return;
+    let timer = null, fired = false, sx = 0, sy = 0;
+    const wait = ms || 480;
+    const clear = () => { if (timer) { clearTimeout(timer); timer = null; } };
+    el.addEventListener('touchstart', (e) => {
+      const pt = (e.touches && e.touches[0]) || e;
+      sx = pt.clientX; sy = pt.clientY;
+      fired = false;
+      clear();
+      timer = setTimeout(() => {
+        timer = null; fired = true;
+        // Сброс через мгновение: следующее касание не должно «проглатываться»
+        setTimeout(() => { fired = false; }, 900);
+        if (navigator.vibrate) { try { navigator.vibrate(15); } catch (err) {} }
+        handler(e);
+      }, wait);
+    }, { passive: true });
+    el.addEventListener('touchmove', (e) => {
+      const pt = (e.touches && e.touches[0]) || e;
+      if (Math.abs(pt.clientX - sx) > 12 || Math.abs(pt.clientY - sy) > 12) clear();   // это прокрутка
+    }, { passive: true });
+    // Палец отпустили после долгого нажатия: система пришлёт «обычное касание»
+    // по тем же координатам — его надо погасить, иначе оно нажмёт первый пункт меню.
+    el.addEventListener('touchend', () => { if (fired) suppressClickUntil = Date.now() + 400; clear(); });
+    el.addEventListener('touchcancel', clear);
+    el.addEventListener('contextmenu', (e) => {
+      e.preventDefault(); clear();
+      if (!fired) { fired = true; setTimeout(() => { fired = false; }, 900); handler(e); }
+    });
+    el.addEventListener('click', (e) => { if (fired) { fired = false; e.stopPropagation(); e.preventDefault(); } }, true);
+  }
+
+  global.UI = { sheet, onLongPress, $, qs, qsa, esc, toast, modal, closeModal, confirmDialog, avatarHTML, fillAvatar,
     initials, timeHM, dayLabel, humanTime, size, countdown, ttlLabel, codeBlock, beep, colorFor, t };
 })(typeof window !== 'undefined' ? window : self);

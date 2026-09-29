@@ -17,6 +17,7 @@
 
   const App = () => global.App;
   const U = () => global.UI;
+  const L = () => window.Log;
 
   // ── Состояние ────────────────────────────────────────────────────────────
   F.friends = new Map();    // id → пользователь
@@ -124,7 +125,7 @@
   F.cancel = async function (rid) {
     const a = App();
     try {
-      await a.api.delete(`/api/v1/friends/requests/${rid}`);
+      await a.api.del(`/api/v1/friends/requests/${rid}`);
       F.outgoing = F.outgoing.filter((x) => x.id !== rid);
       F.afterChange();
     } catch (e) { U().toast((e && e.message) || T('conn.error'), 'err'); }
@@ -133,17 +134,23 @@
   F.remove = async function (userId) {
     const a = App();
     if (!await U().confirmDialog(T('friends.remove'), T('friends.removeAsk'), T('common.delete'), true)) return;
+    const done = L() && L().step('friends', 'удаление из друзей ' + userId);
     try {
-      await a.api.delete('/api/v1/friends/' + userId);
+      await a.api.del('/api/v1/friends/' + userId);
       F.friends.delete(Number(userId));
       U().toast(T('friends.removed'), 'ok');
       F.afterChange();
-    } catch (e) { U().toast((e && e.message) || T('conn.error'), 'err'); }
+      done && done(true);
+    } catch (e) {
+      done && done(false, { код: e && e.code, сообщение: e && e.message });
+      U().toast((e && e.message) || T('conn.error'), 'err');
+    }
   };
 
   F.block = async function (userId) {
     const a = App();
     if (!await U().confirmDialog(T('friends.block'), T('friends.blockAsk'), T('friends.block'), true)) return;
+    const done = L() && L().step('friends', 'блокировка ' + userId);
     try {
       const r = await a.api.post(`/api/v1/friends/${userId}/block`, {});
       F.friends.delete(Number(userId));
@@ -152,7 +159,11 @@
       F.outgoing = F.outgoing.filter((x) => Number(x.to_id) !== Number(userId));
       U().toast(T('friends.blockedDone'), 'ok');
       F.afterChange();
-    } catch (e) { U().toast((e && e.message) || T('conn.error'), 'err'); }
+      done && done(true);
+    } catch (e) {
+      done && done(false, { код: e && e.code, сообщение: e && e.message });
+      U().toast((e && e.message) || T('conn.error'), 'err');
+    }
   };
 
   F.unblock = async function (userId) {
@@ -288,7 +299,7 @@
          <button class="tab" data-fr="requests">${U().esc(T('friends.tab.requests'))}${F.incoming.length ? ' · ' + F.incoming.length : ''}</button>
          <button class="tab" data-fr="blocked">${U().esc(T('friends.tab.blocked'))} · ${F.blocked.size}</button>
        </div>
-       <label>${U().esc(T('friends.search'))}<input id="frFind" placeholder="${U().esc(T('friends.search'))}" autocomplete="off"></label>
+       <label>${U().esc(T('friends.filter'))}<input id="frFind" placeholder="${U().esc(T('friends.filter'))}" autocomplete="off"></label>
        <div id="frBody"></div>`, { actions: false });
     U().$('frTabs').querySelectorAll('[data-fr]').forEach((b) => {
       b.onclick = () => { F.panelTab = b.dataset.fr; F.renderPanel(); };
@@ -326,10 +337,29 @@
   /** Поиск по логину прямо в окне друзей: сразу видно, кто есть кто. */
   F.searchBlock = function () {
     const esc = U().esc;
-    return `<h3>${esc(T('friends.search'))}</h3>
+    return `<h3 class="fr-block-title">${esc(T('friends.findTitle'))}</h3>
       <div class="list-row"><input id="frSearchUser" placeholder="${esc(T('friends.search'))}" autocomplete="off">
       <button class="btn primary" id="frSearchGo">${esc(T('newchat.search'))}</button></div>
       <div id="frSearchOut" class="muted small"></div>`;
+  };
+
+  /**
+   * Действия по строке, собранные из её же кнопок: меню по долгому нажатию
+   * всегда совпадает с тем, что доступно нажатием обычным.
+   */
+  F.rowActions = function (row) {
+    if (!row || !row.querySelectorAll) return;
+    const btns = Array.prototype.slice.call(row.querySelectorAll('[data-act]'));
+    if (!btns.length) return;
+    const icons = { accept: '✅', decline: '✖', cancel: '✖', remove: '🚫', block: '⛔', unblock: '↩', write: '💬', add: '➕' };
+    const danger = { decline: 1, cancel: 1, remove: 1, block: 1 };
+    U().sheet(T('friends.title'), btns.map((b) => ({
+      key: b.dataset.act,
+      icon: icons[b.dataset.act] || '',
+      label: (b.textContent || '').trim(),
+      danger: !!danger[b.dataset.act],
+      run: () => b.click(),
+    })));
   };
 
   F.rowFriend = function (u) {
@@ -384,6 +414,11 @@
   F.bindRows = function () {
     const root = U().$('frBody');
     if (!root) return;
+    // Долгое нажатие на строке: на телефоне открывает те же действия,
+    // что и кнопки справа — кнопки там мелкие и промахнуться легко.
+    root.querySelectorAll('.friend-row').forEach((row) => {
+      U().onLongPress(row, () => F.rowActions(row));
+    });
     root.querySelectorAll('[data-act]').forEach((b) => {
       b.onclick = async (e) => {
         e.stopPropagation();
@@ -410,6 +445,9 @@
           const list = r.users || [];
           if (!list.length) { out.innerHTML = `<p class="muted small">${U().esc(T('friends.nothing'))}</p>`; return; }
           out.innerHTML = list.map((u) => F.rowSearchResult(u)).join('');
+          out.querySelectorAll('.friend-row').forEach((row) => {
+            U().onLongPress(row, () => F.rowActions(row));
+          });
           out.querySelectorAll('[data-act]').forEach((b) => {
             b.onclick = async () => {
               const act = b.dataset.act;

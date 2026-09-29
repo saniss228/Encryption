@@ -449,3 +449,34 @@ label input, label textarea, label select { margin-top: 5px; color: var(--text);
   .call-incoming { gap: 18px; }
   .call-incoming .ctrl { width: 66px; height: 66px; }
 }
+
+/* ── Лист действий по долгому нажатию (телефон) ───────────────────────────── */
+.sheet { display: flex; flex-direction: column; gap: 2px; margin: -6px 0 0; }
+.sheet-row {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  padding: 14px 14px; border: 0; border-radius: 12px; background: var(--bg-2);
+  color: var(--text); font-size: 15px; text-align: left; cursor: pointer;
+  transition: background .15s ease;
+}
+.sheet-row + .sheet-row { margin-top: 2px; }
+.sheet-row:active, .sheet-row:hover { background: var(--bg-3, rgba(255,255,255,.06)); }
+.sheet-row.danger { color: var(--danger); }
+.sheet-row.cancel { justify-content: center; margin-top: 8px; color: var(--muted); }
+.sheet-ico { width: 22px; text-align: center; font-size: 17px; flex: 0 0 22px; }
+.sheet-label { flex: 1 1 auto; }
+/* Минимум 44px по высоте — палец не промахивается (гайдлайны Android/iOS) */
+@media (pointer: coarse) { .sheet-row { min-height: 48px; } }
+
+.fr-block-title { margin: 14px 0 6px; }
+
+/* ── Долгое нажатие на телефоне ────────────────────────────────────────────
+   На сенсорных экранах отключаем системное выделение текста и «меню копирования»
+   внутри сообщений: долгое нажатие открывает наши действия. На ПК всё как было. */
+@media (pointer: coarse) {
+  .msg, .chat-item, .friend-row {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  .msg-text, .msg-reply, .ci-last { -webkit-user-select: none; user-select: none; }
+}

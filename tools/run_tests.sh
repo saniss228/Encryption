@@ -6,6 +6,7 @@
 #    3) файлы: удаление с сервера после скачивания получателем
 #    4) резервная копия и перенос данных на другой сервер
 #    5) UI в headless-браузере (два независимых профиля = два устройства)
+#       + проверка 3.4.1: удаление из друзей, долгое нажатие, журнал
 #    6) админ-панель: API (права saness, блокировка, копия данных, рассылка)
 #    7) админ-панель: интерфейс в браузере (свой сервер, все локализации)
 #
@@ -133,8 +134,10 @@ echo "══════ 5/8 UI end-to-end (headless Chrome) ══════"
 PUP="${PUPPETEER_DIR:-}"
 if [ -n "$PUP" ] && [ -d "$PUP/node_modules/puppeteer" ]; then
   # Скрипты копируем рядом с node_modules: ESM ищет пакеты от своего файла, а не от cwd
-  cp "$ROOT/tools/tests/test_ui_demo.mjs" "$ROOT/tools/tests/test_ui_e2e.mjs" "$ROOT/tools/tests/test_admin_ui.mjs" "$PUP/"
-  (cd "$PUP" && node test_ui_demo.mjs && node test_ui_e2e.mjs) \
+  cp "$ROOT/tools/tests/test_ui_demo.mjs" "$ROOT/tools/tests/test_ui_e2e.mjs" "$ROOT/tools/tests/test_admin_ui.mjs" \
+     "$ROOT/tools/tests/test_ui_341.mjs" "$PUP/"
+  # test_ui_341 — проверка правок 3.4.1: удаление из друзей, долгое нажатие, журнал
+  (cd "$PUP" && node test_ui_demo.mjs && node test_ui_e2e.mjs && node test_ui_341.mjs) \
     && PASS=$((PASS+1)) || FAIL=$((FAIL+1))
 else
   echo "  пропущено: укажите PUPPETEER_DIR=/путь/с/установленным/puppeteer"

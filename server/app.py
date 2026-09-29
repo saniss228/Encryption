@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import shutil
 import time
 from contextlib import asynccontextmanager
@@ -34,13 +35,21 @@ from .routes.friends import router as friends_router
 from .routes.messages import router as messages_router
 from .routes.users import router as users_router
 
+# Подробность журнала: ENC_LOG_LEVEL=DEBUG — писать каждый запрос, медленные
+# операции и решения проверок; по умолчанию INFO (только проблемы и события).
+LOG_LEVEL_NAME = (os.environ.get("ENC_LOG_LEVEL") or "INFO").upper()
+LOG_LEVEL = getattr(logging, LOG_LEVEL_NAME, logging.INFO)
 logging.basicConfig(
-    level=logging.INFO,
+    level=LOG_LEVEL,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     handlers=[logging.FileHandler(LOG_DIR / "server.log", encoding="utf-8"),
               logging.StreamHandler()],
 )
 log = logging.getLogger("encryption")
+# Библиотеки не заливают журнал: их подробности — только когда явно попросили
+for noisy in ("aiosqlite", "asyncio", "multipart"):
+    logging.getLogger(noisy).setLevel(max(LOG_LEVEL, logging.INFO))
+SLOW_REQUEST_MS = float(os.environ.get("ENC_SLOW_MS") or 1500)   # «медленный» запрос
 
 # ── Фоновая уборка: сообщения с TTL и файлы, прожившие 24 часа ─────────────
 async def purge_loop() -> None:
@@ -92,6 +101,8 @@ async def lifespan(app: FastAPI):
     await db.connect()
     task = asyncio.create_task(purge_loop())
     log.info("%s v%s запущен. Данные: %s | Сайт: %s", APP_NAME, VERSION, DATA_DIR, WEB_DIR)
+    log.info("Журнал: %s | уровень %s | «медленный» запрос от %.0f мс",
+             LOG_DIR / "server.log", LOG_LEVEL_NAME, SLOW_REQUEST_MS)
     yield
     task.cancel()
     await db.close()
@@ -127,7 +138,37 @@ async def security_headers(request: Request, call_next):
             return JSONResponse({"detail": {"code": "RATE_LIMITED",
                                             "message": "Слишком много запросов"}}, status_code=429)
     t0 = time.time()
-    response = await call_next(request)
+    try:
+        response = await call_next(request)
+    except Exception as exc:                      # упавший запрос — с трассировкой
+        log.exception("Ошибка при обработке %s %s: %s", request.method, path, exc)
+        raise
+    took_ms = (time.time() - t0) * 1000
+    status = response.status_code
+    if status >= 500:
+        log.error("%s %s → %d за %.0f мс", request.method, path, status, took_ms)
+    elif status >= 400:
+        # Код и текст причины: «401 TOKEN_EXPIRED» вместо просто 401
+        detail = ""
+        try:
+            body = getattr(response, "body", b"") or b""
+            if body and len(body) < 512:
+                parsed = json.loads(body.decode("utf-8", "ignore"))
+                d = parsed.get("detail") if isinstance(parsed, dict) else None
+                if isinstance(d, dict):
+                    detail = " " + str(d.get("code") or d.get("message") or "")
+                elif isinstance(d, str):
+                    detail = " " + d[:120]
+                elif isinstance(d, list) and d:
+                    first = d[0] if isinstance(d[0], dict) else {}
+                    detail = " " + str(first.get("msg") or first.get("type") or "")[:120]
+        except Exception:
+            pass
+        log.warning("%s %s → %d%s за %.0f мс", request.method, path, status, detail, took_ms)
+    elif took_ms >= SLOW_REQUEST_MS:
+        log.info("Медленный запрос: %s %s → %d за %.0f мс", request.method, path, status, took_ms)
+    else:
+        log.debug("%s %s → %d за %.0f мс", request.method, path, status, took_ms)
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "SAMEORIGIN"
     response.headers["Referrer-Policy"] = "no-referrer"

@@ -207,10 +207,13 @@
       (location.protocol.startsWith('http') ? location.origin : OFFICIAL_SERVERS[0].url);
     App.serverBase = base;
     App.api = new Api(App.serverBase);
+    // Журнал: каждый запрос к серверу, каждая ошибка и место, где она возникла
+    if (window.Log) window.Log.wrapRequest(App.api);
     renderServerPicker();          // рисовать выбор сервера можно только зная адрес
     const badge = $('serverBadge');
     try {
       const h = await App.api.get('/api/v1/health');
+      if (h && h.version) window.APP_VERSION = h.version;   // версия попадёт в журнал
       App.serverInfo = h;
       badge.textContent = T('app.secureConnection');
       badge.className = 'badge ok';
@@ -536,6 +539,7 @@
           </div>
         </div>`;
       el.onclick = () => openChat(chat.id);
+      UI.onLongPress(el, () => App.openChatMenu && App.openChatMenu(chat));
       list.appendChild(el);
     });
   }
@@ -719,6 +723,8 @@
     el.querySelectorAll('[data-act]').forEach((btn) => {
       btn.onclick = (ev) => { ev.stopPropagation(); messageAction(btn.dataset.act, m); };
     });
+    // Долгое нажатие на сообщении: то же меню, но без мелких кнопок
+    UI.onLongPress(el, () => messageSheet(m, chat));
     el.querySelectorAll('.reaction').forEach((r) => {
       r.onclick = (ev) => { ev.stopPropagation(); toggleReaction(m, r.dataset.emoji); };
     });
@@ -750,6 +756,7 @@
   async function sendMessage(text, opts) {
     const chat = App.chatsById[App.activeChatId];
     if (!chat) return;
+    const logDone = window.Log ? window.Log.step('msg', 'отправка сообщения в чат ' + chat.id) : null;
     const attachments = App.attachQueue.splice(0);
     let attachment = null;
     try {
@@ -789,7 +796,9 @@
       if (saved && saved.id) local.id = saved.id;
       updateChatFromMessage(chat.id, local);
       clearReply();
+      if (logDone) logDone(true, { id: local.id });
     } catch (e) {
+      if (logDone) logDone(false, { код: e.code, сообщение: e.message });
       // Понятные подсказки вместо кода ошибки: переписка только для друзей
       if (e.code === 'NOT_FRIENDS') {
         toast(T('msg.needFriends'), 'err', 6000);
@@ -817,6 +826,7 @@
 
   async function messageAction(action, m) {
     const chat = App.chatsById[m.chatId];
+    if (window.Log) window.Log.info('msg', 'действие «' + action + '» над сообщением', { id: m.id, chat: m.chatId });
     if (action === 'reply') { setReply(m); return; }
     if (action === 'react') { quickReaction(m); return; }
     if (action === 'forward') { forwardDialog(m, chat); return; }
@@ -850,6 +860,37 @@
         await App.api.del('/api/v1/messages/' + m.id);
         m.deleted = true; m.text = ''; renderMessages(m.chatId);
       }
+    }
+  }
+
+  /** Меню действий по долгому нажатию: единый вид для сообщений, чатов и друзей. */
+  function actionSheet(title, items) {
+    UI.sheet(title, items);
+  }
+
+  /** Меню сообщения: действия те же, что у кнопок, плюс копирование текста. */
+  function messageSheet(m, chat) {
+    if (!m || m.deleted) return;
+    const canCopy = !!(m.text && navigator.clipboard);
+    actionSheet(m.out ? T('chat.you') : peerName(chat), [
+      { key: 'reply', icon: '↩', label: T('msg.action.reply'), run: () => messageAction('reply', m) },
+      { key: 'react', icon: '😊', label: T('msg.action.react'), run: () => messageAction('react', m) },
+      { key: 'forward', icon: '➡', label: T('msg.action.forward'), run: () => messageAction('forward', m) },
+      { key: 'copy', icon: '📋', label: T('msg.action.copy'), run: () => copyMessage(m), show: canCopy },
+      { key: 'pin', icon: '📌', label: m.pinned ? T('msg.action.unpin') : T('msg.action.pin'), run: () => messageAction('pin', m) },
+      m.out ? { key: 'edit', icon: '✎', label: T('msg.action.edit'), run: () => messageAction('edit', m) } : null,
+      m.out ? { key: 'delete', icon: '🗑', label: T('msg.action.delete'), danger: true, run: () => messageAction('delete', m) } : null,
+    ].filter((x) => x && x.show !== false));
+  }
+
+  async function copyMessage(m) {
+    try {
+      await navigator.clipboard.writeText(m.text || '');
+      toast(T('msg.copied'), 'ok', 2500);
+      if (window.Log) window.Log.debug('msg', 'текст сообщения скопирован', { id: m.id });
+    } catch (e) {
+      if (window.Log) window.Log.warn('msg', 'копирование не удалось', { id: m.id, имя: e && e.name });
+      toast(T('msg.copyFailed'), 'err');
     }
   }
 
@@ -1032,7 +1073,23 @@
   }
 
   /* ══ Realtime события ═══════════════════════════════════════════════════ */
+  /* Действия пользователя в журнал: видно, что нажали и что из этого вышло. */
+  document.addEventListener('click', (e) => {
+    if (!window.Log) return;
+    const el = e.target && e.target.closest ? e.target.closest('[data-act],[data-fr],[data-tab],button') : null;
+    if (!el) return;
+    const act = el.dataset && (el.dataset.act || el.dataset.fr || el.dataset.tab);
+    const label = (act || el.id || (el.textContent || '').trim().slice(0, 24) || el.tagName);
+    window.Log.debug('ui', 'нажатие: ' + label, { id: el.id || undefined, mid: el.dataset && el.dataset.mid });
+  }, true);
+
   async function handleRealtime(ev) {
+    // В журнал — только вид события и идентификаторы: без текста и ключей
+    if (window.Log) {
+      window.Log.debug('ws', 'событие ' + (ev && ev.t), {
+        chat: ev && ev.chat_id, msg: ev && ev.message_id, user: ev && (ev.user_id || ev.from),
+      });
+    }
     switch (ev.t) {
       case 'conn':
         if (ev.online) {
@@ -1569,6 +1626,12 @@
       <h3>${esc(T('settings.connection'))}</h3>
       ${row(T('settings.connection'), T('settings.connectionValue'))}
       ${row(T('settings.version'), (App.serverInfo && App.serverInfo.version) || '3.1.0')}
+      <h3>🔍 ${esc(T('settings.diagnostics'))}</h3>
+      <p class="muted small">${esc(T('settings.diagnosticsNote'))}</p>
+      <div class="row-between"><span>${esc(T('settings.detailLog'))}</span>
+        <button class="switch ${Log.isDetailed() ? 'on' : ''}" id="swLog" title="${esc(T('settings.detailLogHint'))}"></button></div>
+      <button class="btn" id="saveLog" style="margin-top:10px">${esc(T('settings.saveLog'))}</button>
+      <button class="btn" id="clearLog" style="margin-top:8px">${esc(T('settings.clearLog'))}</button>
       ${App.user.is_admin ? `<h3>🛡 ${esc(T('admin.title'))}</h3>
         <p class="muted small">${esc(T('admin.encryptionNote'))}</p>
         <button class="btn primary" id="adminBtn">${esc(T('admin.title'))}</button>` : ''}
@@ -1588,6 +1651,13 @@
       openSettings('app');
     };
     if ($('adminBtn')) $('adminBtn').onclick = () => { closeModal(); Admin.open(); };
+    // Диагностика: подробный режим и выгрузка журнала файлом
+    $('swLog').onclick = (e) => { Log.setDetailed(!Log.isDetailed()); e.target.classList.toggle('on'); };
+    $('saveLog').onclick = () => {
+      const ok = Log.download();
+      toast(ok ? T('settings.logSaved') : T('settings.saveLog'), ok ? 'ok' : 'err');
+    };
+    $('clearLog').onclick = () => { Log.clear(); toast(T('settings.clearLog'), 'ok'); };
     $('logoutBtn').onclick = async () => {
       try { await App.api.post('/api/v1/auth/logout', {}); } catch (e) {}
       doLogout(false);
@@ -1880,8 +1950,13 @@
     });
     $('backBtn').onclick = () => document.querySelector('.main-screen').classList.remove('chat-open');
     $('peerInfo').onclick = openChatInfo;
-    $('chatMenuBtn').onclick = () => {
-      const chat = App.chatsById[App.activeChatId];
+    $('chatMenuBtn').onclick = () => openChatMenu(App.chatsById[App.activeChatId]);
+    App.openChatMenu = openChatMenu;      // доступно из списка чатов и по долгому нажатию
+
+    /** Меню чата: то же самое, что по кнопке «⋯», и по долгому нажатию в списке. */
+    function openChatMenu(chat) {
+      chat = chat || App.chatsById[App.activeChatId];
+      if (!chat) return;
       modal(peerName(chat), `
         <button class="btn" id="cmInfo">${esc(T('chatmenu.info'))}</button>
         <button class="btn" id="cmPin" style="margin-top:8px">${esc(chat.me && chat.me.pinned ? T('chatmenu.unpin') : T('chatmenu.pin'))}</button>
@@ -1913,7 +1988,8 @@
           renderChatList(); closeModal();
         }
       };
-    };
+    }
+
     $('closePanel').onclick = () => $('rightPanel').classList.add('hidden');
     $('sendBtn').onclick = sendCurrent;
     $('composerInput').oninput = onComposerInput;
@@ -2028,7 +2104,16 @@
         if (!recorder || recorder.state !== 'recording') { clearInterval(stopCheck); $('micBtn').textContent = '🎙'; }
         else if (Date.now() - recStart > 120000) { recorder.stop(); clearInterval(stopCheck); }
       }, 500);
-    } catch (e) { toast(T('file.noMic'), 'err'); }
+    } catch (e) {
+      // Разные причины — разные подсказки: отказ в доступе, занятый микрофон,
+      // отсутствие микрофона; на телефоне ещё и выключенное разрешение в системе
+      const name = (e && e.name) || '';
+      const key = name === 'NotAllowedError' || name === 'SecurityError' ? 'file.micDenied'
+        : name === 'NotFoundError' || name === 'OverconstrainedError' ? 'file.micMissing'
+        : 'file.noMic';
+      if (window.Log) window.Log.error('media', 'микрофон недоступен при записи', e, { имя: name });
+      toast(T(key), 'err', 6000);
+    }
   }
 
   // Аппаратная кнопка «назад» в Android-оболочке
