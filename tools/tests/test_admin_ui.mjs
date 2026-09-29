@@ -19,6 +19,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const ROOT = process.env.ENC_ROOT || '/home/user/encryption';
+// Скриншоты пишем ВНЕ репозитория: это артефакты прогона, а не файлы проекта.
+// Каталог задаётся ENC_SHOTS_DIR (по умолчанию — временный).
+import { mkdirSync as __mkShots } from 'node:fs';
+const SHOTS = process.env.ENC_SHOTS_DIR || '/tmp/enc-shots';
+__mkShots(SHOTS, { recursive: true });
+
 const PORT = process.env.ENC_ADMIN_UI_PORT || '8036';
 const BASE = `http://127.0.0.1:${PORT}`;
 const S = Date.now().toString().slice(-5);
@@ -99,7 +105,7 @@ try {
   check('обзор сервера: счётчики пользователей, чатов, файлов, диска', cards.length >= 6, `${cards.length} карточек`);
   const note = await page.evaluate(() => document.querySelector('#modal')?.textContent || '');
   check('в панели написано, что переписка админу недоступна', /не может читать|шифротекст/i.test(note));
-  await page.screenshot({ path: join(ROOT, 'docs/screen-admin-overview.png') });
+  await page.screenshot({ path: join(SHOTS, 'screen-admin-overview.png') });
 
   // ── 3. Пользователи и действия ───────────────────────────────────────────
   await page.evaluate(() => Admin.open('users'));

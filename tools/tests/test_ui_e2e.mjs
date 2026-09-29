@@ -4,6 +4,12 @@ const S = Date.now().toString().slice(-5);
 const A = 'anna' + S, B = 'boris' + S;
 const browser = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox','--disable-dev-shm-usage'] });
 const errs = [];
+// Скриншоты пишем ВНЕ репозитория: это артефакты прогона, а не файлы проекта.
+// Каталог задаётся ENC_SHOTS_DIR (по умолчанию — временный).
+import { mkdirSync as __mkShots } from 'node:fs';
+const SHOTS = process.env.ENC_SHOTS_DIR || '/tmp/enc-shots';
+__mkShots(SHOTS, { recursive: true });
+
 async function newUser(name, display) {
   // Отдельный профиль браузера = отдельное «устройство» (иначе сработает
   // политика «один аккаунт на устройство» — что мы уже проверили отдельно)
@@ -25,7 +31,7 @@ async function newUser(name, display) {
   await page.waitForSelector('#phraseAck', { timeout: 60000 });
   await page.waitForSelector('#phraseAck', { timeout: 20000 });
   const phrase = await page.$eval('#phraseBox', el => el.textContent.trim());
-  await page.screenshot({ path: `/home/user/encryption/docs/screen-recovery-${name === A ? 'a' : 'b'}.png` });
+  await page.screenshot({ path: `${SHOTS}/screen-recovery-${name === A ? 'a' : 'b'}.png` });
   await page.evaluate(() => document.getElementById('phraseDone') ? (document.getElementById('phraseAck').click(), document.getElementById('phraseDone').click()) : null);
   return { page, phrase };
 }
@@ -280,12 +286,12 @@ await a.page.select('#langSelect', 'en');
 await new Promise((r) => setTimeout(r, 700));
 const enTabs = await a.page.$$eval('#settingsTabs .tab', (els) => els.map((e) => e.textContent));
 console.log('   разделы настроек (en):', enTabs.join(' / '));
-await a.page.screenshot({ path: (process.env.ENC_ROOT || '.') + '/docs/screen-settings-en.png' });
+await a.page.screenshot({ path: SHOTS + '/screen-settings-en.png' });
 await a.page.select('#langSelect', 'ru');
 await new Promise((r) => setTimeout(r, 500));
 
-await a.page.screenshot({ path: (process.env.ENC_ROOT || '.') + '/docs/screen-chat.png' });
-await b.page.screenshot({ path: (process.env.ENC_ROOT || '.') + '/docs/screen-mobile-check.png' });
+await a.page.screenshot({ path: SHOTS + '/screen-chat.png' });
+await b.page.screenshot({ path: SHOTS + '/screen-mobile-check.png' });
 
 console.log('\nФраза для проверки восстановления у Бориса:', b.phrase.split(' ').slice(0, 6).join(' ') + ' …');
 console.log('Ошибки страниц:', errs.length ? errs.slice(0, 6) : 'нет');

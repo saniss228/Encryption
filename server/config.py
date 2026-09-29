@@ -84,6 +84,9 @@ MAX_DEVICES_PER_ACCOUNT = int(os.getenv("ENC_MAX_DEVICES", "4"))
 DEVICE_REBIND_COOLDOWN_DAYS = int(os.getenv("ENC_DEVICE_COOLDOWN_DAYS", "30"))
 
 RATE_LIMIT_PER_MIN = int(os.getenv("ENC_RATE_LIMIT", "240"))
+# Множитель для точечных лимитов (вход, регистрация, восстановление).
+# Нужен тестам: вся сюита идёт с одного IP и создаёт десятки аккаунтов.
+RATE_LIMIT_FACTOR = float(os.getenv("ENC_RATE_FACTOR", "1"))
 MAX_MESSAGE_BYTES = int(os.getenv("ENC_MAX_MESSAGE_BYTES", str(64 * 1024)))
 GROUP_MAX_MEMBERS = int(os.getenv("ENC_GROUP_MAX", "200"))
 RECOVERY_WORDS = int(os.getenv("ENC_RECOVERY_WORDS", "24"))   # BIP39-фраза

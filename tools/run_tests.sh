@@ -18,6 +18,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export ENC_ROOT="$ROOT"
 PORT="${ENC_TEST_PORT:-8031}"
 export ENC_BASE="http://127.0.0.1:$PORT"
+# Скриншоты прогона складываем вне репозитория (в проект они не попадают)
+export ENC_SHOTS_DIR="${ENC_SHOTS_DIR:-/tmp/enc-shots}"
 DATA="$(mktemp -d)"
 PASS=0; FAIL=0
 
@@ -101,9 +103,11 @@ if [ "$CORE_OK" = "1" ]; then PASS=$((PASS+1)); else FAIL=$((FAIL+1)); fi
 
 echo
 echo "══════ 2/8 API end-to-end (тестовый сервер на :$PORT) ══════"
-# В тестах лимит частоты поднят: все разделы идут с одного IP и создают
-# десятки аккаунтов в минуту — иначе получаем 429 RATE_LIMITED (боевой лимит 240/мин).
-ENC_PORT="$PORT" ENC_DATA_DIR="$DATA" ENC_RATE_LIMIT=100000 python3 -m server.app >"$DATA/server.log" 2>&1 &
+# В тестах лимиты частоты подняты: все разделы идут с одного IP и создают десятки
+# аккаунтов в минуту — иначе получаем 429 RATE_LIMITED (боевой лимит 240/мин,
+# регистрация — 10/мин). Множитель ENC_RATE_FACTOR — только для проверок.
+ENC_PORT="$PORT" ENC_DATA_DIR="$DATA" ENC_RATE_LIMIT=100000 ENC_RATE_FACTOR=100 \
+  python3 -m server.app >"$DATA/server.log" 2>&1 &
 SRV=$!
 trap 'kill $SRV 2>/dev/null' EXIT
 for i in $(seq 1 30); do

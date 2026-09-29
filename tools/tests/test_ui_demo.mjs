@@ -2,6 +2,12 @@ import puppeteer from 'puppeteer';
 const BASE = process.env.ENC_BASE || 'http://127.0.0.1:8031';
 const browser = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'] });
 const page = await browser.newPage();
+// Скриншоты пишем ВНЕ репозитория: это артефакты прогона, а не файлы проекта.
+// Каталог задаётся ENC_SHOTS_DIR (по умолчанию — временный).
+import { mkdirSync as __mkShots } from 'node:fs';
+const SHOTS = process.env.ENC_SHOTS_DIR || '/tmp/enc-shots';
+__mkShots(SHOTS, { recursive: true });
+
 await page.setViewport({ width: 1360, height: 860 });
 const errors = [];
 page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
@@ -85,16 +91,16 @@ await page.select('#langSelect', 'en');
 await new Promise((r) => setTimeout(r, 600));
 const enTabs = await page.$$eval('#settingsTabs .tab', (els) => els.map((e) => e.textContent));
 console.log('7b. Интерфейс по-английски:', enTabs.join(' / '));
-await page.screenshot({ path: (process.env.ENC_ROOT || '.') + '/docs/screen-settings-en.png' });
+await page.screenshot({ path: SHOTS + '/screen-settings-en.png' });
 await page.select('#langSelect', 'ru');
 await new Promise((r) => setTimeout(r, 500));
 await page.evaluate(() => UI.closeModal());
 
 // Скриншоты
-await page.screenshot({ path: (process.env.ENC_ROOT || '.') + '/docs/screen-chat.png' });
+await page.screenshot({ path: SHOTS + '/screen-chat.png' });
 await page.click('#callAudioBtn').catch(() => {});
 await new Promise((r) => setTimeout(r, 1200));
-await page.screenshot({ path: (process.env.ENC_ROOT || '.') + '/docs/screen-call.png' });
+await page.screenshot({ path: SHOTS + '/screen-call.png' });
 const callVisible = await page.$eval('#callOverlay', (el) => !el.classList.contains('hidden'));
 console.log('7. Экран звонка открывается:', callVisible);
 await page.evaluate(() => window.Call && Call.cleanup());
@@ -109,7 +115,7 @@ await page.evaluate(() => document.querySelector('[data-st=security]').click());
 await new Promise((r) => setTimeout(r, 900));
 const secText = await page.$eval('#settingsBody', (el) => el.textContent.replace(/\s+/g, ' ').slice(0, 220));
 console.log('9. Безопасность:', secText);
-await page.screenshot({ path: (process.env.ENC_ROOT || '.') + '/docs/screen-settings.png' });
+await page.screenshot({ path: SHOTS + '/screen-settings.png' });
 
 console.log('\nОшибки страницы:', errors.length ? errors.slice(0, 8) : 'нет');
 await browser.close();

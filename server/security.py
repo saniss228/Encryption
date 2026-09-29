@@ -188,7 +188,9 @@ async def current_user(sess: dict = Depends(current_session)) -> dict:
 
 
 def require_rate(request: Request, key: str, limit: int) -> None:
+    from .config import RATE_LIMIT_FACTOR
     ip = client_ip(request)
+    limit = max(1, int(limit * RATE_LIMIT_FACTOR))
     if not rate_limit(f"{key}:{ip}", limit):
         raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS,
                             "Слишком много запросов, попробуйте позже")
