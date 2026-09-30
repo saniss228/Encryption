@@ -663,6 +663,12 @@
     const chat = App.chatsById[chatId];
     const box = $('messages');
     const list = (App.messages[chatId] || []).slice().sort((a, b) => a.ts - b.ts);
+    
+    // Сохраняем позицию прокрутки и ID первого видимого сообщения
+    const prevScrollTop = box.scrollTop;
+    const prevScrollHeight = box.scrollHeight;
+    const prevFirstMsg = box.querySelector('.msg') ? box.querySelector('.msg').dataset.mid : null;
+    
     box.innerHTML = '';
     let lastDay = null;
     for (const m of list) {
@@ -683,7 +689,24 @@
       bar.innerHTML = `📌 ${esc((pinned.text || '').slice(0, 120))}`;
       bar.onclick = () => { const n = document.querySelector(`[data-mid="${pinned.id}"]`); n && n.scrollIntoView({ behavior: 'smooth', block: 'center' }); };
     } else bar.classList.add('hidden');
-    box.scrollTop = box.scrollHeight;
+    
+    // Улучшенная логика прокрутки:
+    // 1. Если пользователь был внизу или это первый рендер - прокручиваем вниз
+    // 2. Если загружались старые сообщения (прокрутка вверх) - сохраняем позицию
+    const isAtBottom = prevScrollHeight - prevScrollTop < 100;
+    const isLoadingOlder = list.length > 0 && prevFirstMsg && list[0].id !== prevFirstMsg;
+    
+    if (isAtBottom || list.length === 0) {
+      // Прокручиваем плавно вниз
+      box.scrollTo({ top: box.scrollHeight, behavior: 'smooth' });
+    } else if (isLoadingOlder) {
+      // Сохраняем позицию при загрузке старых сообщений
+      const firstMsg = box.querySelector('.msg');
+      if (firstMsg) {
+        const firstMsgTop = firstMsg.offsetTop;
+        box.scrollTop = prevScrollTop + firstMsgTop;
+      }
+    }
   }
 
   function messageNode(m, chat) {
@@ -2065,6 +2088,30 @@
 
     // Уход со страницы — фиксируем «последнее посещение»
     window.addEventListener('beforeunload', () => { App.api && App.api.disconnectWS(); });
+
+    // Прокрутка чатов - загрузка старых сообщений
+    let isLoadingOlder = false;
+    $('messages').addEventListener('scroll', async (e) => {
+      const box = e.target;
+      const chatId = App.activeChatId;
+      if (!chatId || isLoadingOlder) return;
+      
+      // Если пользователь прокрутил вверх и осталось меньше 200px до верха
+      if (box.scrollTop < 200) {
+        const list = App.messages[chatId] || [];
+        if (list.length >= 20) {  // Уже есть сообщения, можно пытаться загрузить старые
+          const oldest = list[0];
+          isLoadingOlder = true;
+          try {
+            await loadMessages(chatId, { before: oldest.id, limit: 40 });
+          } catch (e) {
+            // Ошибка загрузки - молча игнорируем
+          } finally {
+            isLoadingOlder = false;
+          }
+        }
+      }
+    });
   }
 
   function localSearch(term) {
