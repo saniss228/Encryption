@@ -1,0 +1,3 @@
+41608e39f1d55a7d7be73136b3b06e9dc702eff3927696f7c565fc1e821d8719  release/encryption-3.4.2-all.zip
+7368a284fc4311f5e72b856a3cb26643e195d4c432774c0fcb104f17fa8bc0e5  release/encryption-3.4.2-server-web.zip
+28f3ddd0bce5f1b757c649ecb22de750ca2d548c6ca12277eff5966e3195cadc  release/android/Encryption-3.4.2.apk

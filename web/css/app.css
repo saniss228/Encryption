@@ -111,7 +111,7 @@ label input, label textarea, label select { margin-top: 5px; color: var(--text);
 .chip { border: 1px solid var(--line); background: transparent; color: var(--muted); border-radius: 20px;
   padding: 5px 11px; font-size: 12.5px; cursor: pointer; }
 .chip.active { background: var(--accent); color: #fff; border-color: transparent; }
-.chat-list { flex: 1; overflow: auto; padding: 4px 6px 10px; }
+.chat-list { flex: 1; overflow: auto; padding: 4px 6px 10px; scroll-behavior: smooth; }
 .chat-item { display: flex; gap: 10px; padding: 10px; border-radius: 12px; cursor: pointer; align-items: center; }
 .chat-item:hover { background: var(--bg-3); }
 .chat-item.active { background: linear-gradient(135deg, rgba(79,140,255,.22), rgba(123,92,255,.18)); }
@@ -153,7 +153,7 @@ label input, label textarea, label select { margin-top: 5px; color: var(--text);
 .chat-actions { display: flex; gap: 2px; align-items: center; }
 .e2e-badge { font-size: 11.5px; color: var(--ok); border: 1px solid rgba(46,204,113,.35); padding: 3px 8px; border-radius: 20px; }
 .pinned-bar { padding: 8px 14px; background: var(--bg-2); border-bottom: 1px solid var(--line); font-size: 13px; color: var(--muted); cursor: pointer; }
-.messages { flex: 1; overflow: auto; padding: 14px 16px 8px; display: flex; flex-direction: column; gap: 3px; }
+.messages { flex: 1; overflow: auto; padding: 14px 16px 8px; display: flex; flex-direction: column; gap: 3px; scroll-behavior: smooth; }
 .msg { max-width: min(680px, 78%); align-self: flex-start; background: var(--bubble-in); border-radius: 14px 14px 14px 4px;
   padding: 8px 12px; position: relative; box-shadow: 0 1px 2px rgba(0,0,0,.18); word-wrap: break-word; }
 .msg.out { align-self: flex-end; background: var(--bubble-out); border-radius: 14px 14px 4px 14px; }
